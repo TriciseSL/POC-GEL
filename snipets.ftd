@@ -1,0 +1,2752 @@
+variablesGlobalesREST
+GLOBAL
+<gel:script xmlns="http://www.w3.org/2001/XMLSchema" xmlns:core="jelly:core" xmlns:gel="jelly:com.niku.union.gel.GELTagLibrary" xmlns:sql="jelly:sql"
+  xmlns:util="jelly:util" xmlns:xog="http://www.niku.com/xog" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<gel:setDataSource dbId="niku"/>
+	<!-- Set Clarity Parameters -->
+	<!-- *** Fetch the clarity’s parameter from Property File ***  -->
+	<core:invokeStatic className="com.niku.union.config.ConfigurationManager" method="getInstance" var="thisClarityConfig"/>
+	<!-- *** Fetch the clarity’s Version ***  -->
+	<core:set value="${thisClarityConfig.getVersionProperty('version')}" var="ClarityVersion"/>
+	<!-- *** Fetch the clarity’s Application URL ** -->
+	<core:set value="${thisClarityConfig.getProperties().getWebServer().getWebServerInstance(0).getEntryUrl()}" var="AppEntryUrl"/>
+	<core:set value="${thisClarityConfig.getProperties().getWebServer().getWebServerInstance(0).getContext()}" var="AppContext"/>
+	<!-- *** no method for rest context, using gel parameter*** -->
+	<core:set value="/ppm" var="AppRestContext"/>
+	<core:set value="${AppEntryUrl}${AppContext}" var="ClarityBaseUrl"/>
+	<core:set value="${AppEntryUrl}${AppRestContext}/rest/v1" var="ClarityRestUrl"/>
+	<!-- *** Fetch the sender’s mail address *** -->
+	<!-- <core:invoke method="getProperties" on="${thisClarityConfig}" var="property"/> -->
+	<!-- <core:invoke method="getMailServer" on="${property}" var="mailserver"/> -->
+	<!-- <core:invoke method="getUsername" on="${mailserver}" var="mailsender"/> -->
+	<!-- *** Set integration user and password *** -->
+	<gel:parameter default="0" var="DebugParameter"/>
+	<gel:parameter default="adminodpe" var="cl_UserName"/>
+
+	<!-- Obtenemos un sessionID para la conexión a Clarity -->
+	<core:new className="com.niku.union.security.DefaultSecurityIdentifier" var="secId"/>
+	<core:invokeStatic className="com.niku.union.security.UserSessionControllerFactory" method="getInstance" var="userSessionCtrl"/>
+	<core:set value="${userSessionCtrl.init(cl_UserName, secId)}" var="secId"/>
+	<core:set value="${secId.getSessionId()}" var="sessionID"/>
+	<core:if test="${sessionID == null}">
+		<gel:log level="ERROR">No se pudo hacer login en Clarity por sessionID. Comprueba los parámetros de conexión.</gel:log>
+	</core:if>
+
+	<!-- ***************************************************************** -->
+	<!-- Persist the parameters through the process -->
+	<!-- ***************************************************************** -->
+	<gel:persist scope="INSTANCE" var="ClarityBaseUrl">${ClarityBaseUrl}</gel:persist>
+	<gel:persist scope="INSTANCE" var="ClarityRestUrl">${ClarityRestUrl}</gel:persist>
+	<gel:persist scope="INSTANCE" var="cl_UserName">${cl_UserName}</gel:persist>
+	<gel:persist scope="INSTANCE" var="cl_UserPassword">${cl_UserPassword}</gel:persist>
+	<!-- <gel:persist scope="INSTANCE" var="mailsender">${mailsender}</gel:persist> -->
+	<gel:persist scope="INSTANCE" var="ClarityVersion">${ClarityVersion}</gel:persist>
+	<gel:persist scope="INSTANCE" var="basicAuth">${basicAuth}</gel:persist>
+	<gel:persist scope="INSTANCE" var="sessionID">${sessionID}</gel:persist>
+
+	<core:if test="${DebugParameter == 1}">
+		<gel:log level="INFO">**********Clarity Parameter’s**************</gel:log>
+		<gel:log level="INFO">ClarityBaseUrl        : ${ClarityBaseUrl} </gel:log>
+		<gel:log level="INFO">ClarityRestUrl        : ${ClarityRestUrl}</gel:log>
+		<gel:log level="INFO">cl_UserName           : ${cl_UserName}</gel:log>
+		<!-- <gel:log level="INFO">mailsender       : ${mailsender}</gel:log> -->
+		<gel:log level="INFO">ClarityVersion        : ${ClarityVersion}</gel:log>
+		<gel:log level="INFO">basicAuth             : ${basicAuth}</gel:log>
+		<gel:log level="INFO">sessionID        	    : ${sessionID}</gel:log>
+	</core:if>
+</gel:script>[>END<]!$[FingerTextData FingerTextData]@#
+variablesGlobalesCorto
+GLOBAL
+<gel:script xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/"
+                xmlns:core="jelly:core" xmlns:email="jelly:email"
+                xmlns:file="jelly:com.niku.union.gel.FileTagLibrary"
+                xmlns:gel="jelly:com.niku.union.gel.GELTagLibrary"
+                xmlns:soap="jelly:com.niku.union.gel.SOAPTagLibrary"
+                xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                xmlns:sql="jelly:sql"
+                xmlns:x="jelly:org.apache.commons.jelly.tags.xml.XMLTagLibrary"
+                xmlns:xog="http://www.niku.com/xog"
+                xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<gel:parameter var="username"/>
+	<gel:parameter var="debug_flag"/>
+	<core:set value="${gel_objectInstanceId}" var="myObjectId"/>
+	<core:set value="${gel_processInstanceId}" var="myProcessId"/>
+
+	<gel:setDataSource dbId="niku"/>
+
+	<core:invokeStatic className="com.niku.union.config.ConfigurationManager" method="getInstance" var="config"/>
+	<core:set var="v_IsLocal">0</core:set>
+
+	<core:set value="${config.getProperties().getWebServer().getWebServerInstance(0).getId()}" var="WebServerId"/>
+	<core:if test="${WebServerId == 'app'}">
+		<core:set value="${config.getProperties().getWebServer().getWebServerInstance(0).getAddress()}" var="AddressIp"/>
+		<core:set value="${config.getProperties().getWebServer().getWebServerInstance(0).getEntryUrl()}" var="EntryURL"/>
+		<core:set value="${config.getProperties().getWebServer().getWebServerInstance(0).getPort()}" var="Port"/>
+		<core:if test="${EntryURL == 'http://localhost'}">
+			<gel:log level="info" message="NULL ADDRESS IS LOCAL..."/>
+			<core:set var="v_IsLocal">1</core:set>
+			<core:set var="AddressIp">${EntryURL}</core:set>
+		</core:if>
+	</core:if>
+	<core:if test="${Port != null}">
+		<core:set value="${EntryURL}:${Port}" var="EntryURL"/>
+	</core:if>
+	<core:if test="${v_is_Local == 0}">
+		<core:if test="${AddressIp != ''}">
+			<core:set value="http://${AddressIp}" var="EntryURL"/>
+		</core:if>
+	</core:if>
+
+	<core:set value="${config.getProperties().getDirectories.getInstallDir()}" var="NIKUHOME"/>
+
+	<core:new className="com.niku.union.security.DefaultSecurityIdentifier" var="secId"/>
+	<core:invokeStatic className="com.niku.union.security.UserSessionControllerFactory" method="getInstance" var="userSessionCtrl"/>
+	<core:set value="${userSessionCtrl.init(username, secId)}" var="secId"/>
+	<core:set value="${secId.getUserName()}" var="XOGUsername"/>
+	<core:set value="${secId.getPWD()}" var="XOGPassword"/>
+	<core:set value="${secId.getSessionId()}" var="sessionID"/>
+
+	<sql:query var="bpm">
+		select initiated_by from bpm_run_processes bpm
+		where ID=${myProcessId}
+	</sql:query>
+	<core:set value="${bpm.rows[0].initiated_by}" var="myUserId"/>
+
+	<core:if test="${debug_flag != 0}">
+		<gel:log>EntryURL = ${EntryURL}</gel:log>
+		<gel:log>AddressIp = ${AddressIp}</gel:log>
+		<gel:log>ProcessId = ${myProcessId}</gel:log>
+		<gel:log>GEL Object = ${myObjectId}</gel:log>
+		<gel:log>GEL XOG USER = ${XOGUsername}</gel:log>
+		<gel:log>GEL PASSWORD = ${XOGPassword}</gel:log>
+		<gel:log>Process Initiator = ${myUserId}</gel:log>
+		<gel:log>GEL ProcessId = ${gel_processInstanceId}}</gel:log>
+		<gel:log>GEL UserId = ${myUserId}</gel:log>
+		<gel:log>GEL SessionId = ${sessionID}</gel:log>
+	</core:if>
+
+	<core:set value="true" var="DEBUG"/>
+	<core:set value="${EntryURL}" var="vg_url"/>
+	<core:set value="${username}" var="vg_usuario"/>
+	<core:set value="${sessionID}" var="vg_sessionID"/>
+	<core:set value="${v_email}" var="vg_email_administrador"/>
+	<gel:persist scope="INSTANCE" value="true" var="DEBUG"/>
+	<gel:persist scope="INSTANCE" value="${EntryURL}" var="vg_url"/>
+	<gel:persist scope="INSTANCE" value="${username}" var="vg_usuario"/>
+	<gel:persist scope="INSTANCE" value="${sessionID}" var="vg_sessionID"/>
+	<gel:persist scope="INSTANCE" value="${v_email}" var="vg_email_administrador"/>
+	<gel:log>[OK] Variables de entorno cargadas correctamente.</gel:log>
+</gel:script>
+[>END<]!$[FingerTextData FingerTextData]@#
+
+variablesContext
+GLOBAL
+<!-- variables de contexto -->
+<core:set var="entries" value="${context.getVariables().entrySet().toArray()}"/>
+<core:forEach var="entry" items="${entries}">
+	<core:if test="${!entry.getKey().equalsIgnoreCase('systemScope')}">
+		<gel:log>${entry.getKey()} | ${entry.getValue()} | ${entry.getValue().getClass().getName()}</gel:log>
+	</core:if>
+</core:forEach>[>END<]!$[FingerTextData FingerTextData]@#
+
+usersByGroupCode
+GLOBAL
+SELECT *
+FROM CMN_SEC_USERS u
+INNER JOIN CMN_SEC_USER_GROUPS ug ON u.ID = ug.USER_ID
+INNER JOIN CMN_SEC_GROUPS g ON g.id = ug.GROUP_ID
+WHERE g.GROUP_CODE = ''[>END<]!$[FingerTextData FingerTextData]@#
+quitarTiempoDateTime
+GLOBAL
+
+[>END<]!$[FingerTextData FingerTextData]@#
+nodoMinimoUser
+GLOBAL
+<NikuDataBus xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../xsd/nikuxog_user.xsd">
+	<Header action="write" externalSource="NIKU" objectType="user" version="13.3.0.286"/>
+	<Users>
+		<User externalId="1234" userName="${NOMBREUSUARIO}">
+			<PersonalInformation emailAddress="${EMAILUSUARIO}" firstName="${FIRSTNAME}" lastName="${LASTNAME}"/>
+			<Resource resourceId="${UNIQUENAME}"/>
+			<BusinessObjects/>
+			<Company/>
+			<GlobalRights/>
+			<InstanceRights/>
+			<InstanceOBSRights/>
+		</User>
+	</Users>
+</NikuDataBus>
+[>END<]!$[FingerTextData FingerTextData]@#
+nodoMinimoResource
+GLOBAL
+<NikuDataBus xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../xsd/nikuxog_resource.xsd">
+	<Header action="write" externalSource="NIKU" objectType="resource" version="14.4.0.234"/>
+	<Resources>
+		<Resource resourceId="${idRecurso}">
+		</Resource>
+	</Resources>
+</NikuDataBus>
+[>END<]!$[FingerTextData FingerTextData]@#
+nodoMinimoProj
+GLOBAL
+<NikuDataBus>
+	<Header action="write" externalSource="NIKU" objectType="project" version="13.3.0.286"/>
+	<Projects>
+		<Project name="${project_name}" projectID="${project_code}">
+		</Project>
+	</Projects>
+</NikuDataBus>
+[>END<]!$[FingerTextData FingerTextData]@#
+nodoMinimoIdea
+GLOBAL
+<NikuDataBus xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../xsd/nikuxog_idea.xsd">
+	<Header action="write" externalSource="NIKU" objectType="idea" version="8.0"/>
+	<Ideas>
+		<Idea initiatorUserName="INITUSERNAME" name="IDEANAME" objectID="IDEACODE">
+			<Allocations/>
+			<scenarioDependencies/>
+			<InvestmentAssociations>
+				<Allocations/>
+				<Hierarchies/>
+			</InvestmentAssociations>
+			<OBSAssocs complete="false">
+			</OBSAssocs>
+			<CustomInformation/>
+		</Idea>
+	</Ideas>
+</NikuDataBus>
+[>END<]!$[FingerTextData FingerTextData]@#
+leerCSV
+GLOBAL
+<core:set value="ARCHIVO.csv" var="fileName"/>
+<core:set value="C:\RUTA\${fileName}" var="pathToFile"/>
+<file:readFile delimiter="SEPARADOR" embedded="false" fileName="${pathToFile}" var="archivoLeido"/>
+[>END<]!$[FingerTextData FingerTextData]@#
+lanzaXOGsSinPassAuthCheck
+GLOBAL
+<!-- Lanzar XOG -->
+<soap:invoke endpoint="${vg_url}/niku/xog" var="xog_salida_xml">
+	<soap:message>
+		<soapenv:Envelope>
+			<soapenv:Header>
+				<xog:Auth>
+					<xog:SessionID>${vg_sessionID}</xog:SessionID>
+				</xog:Auth>
+			</soapenv:Header>
+			<soapenv:Body>
+				<gel:include select="$XMLXOG"/>
+			</soapenv:Body>
+		</soapenv:Envelope>
+	</soap:message>
+</soap:invoke>
+
+<gel:set select="$xog_salida_xml/soapenv:Envelope/soapenv:Body/XOGOutput" var="xog_output"/>
+<gel:set asString="true" select="$xog_output/Status/@state" var="stateW"/>
+<core:if test="${stateW != 'SUCCESS'}">
+	<gel:set asString="true" select="$xog_output" var="xog_error"/>
+	<gel:log level="WARN">MENSAJE ERROR</gel:log>
+	<core:set var="error" value="1"/>
+</core:if>
+
+<core:if test="${error == 1}">
+
+	<core:new className="com.niku.union.security.DefaultSecurityIdentifier" var="secId"/>
+	<core:invokeStatic className="com.niku.union.security.UserSessionControllerFactory" method="getInstance" var="userSessionCtrl"/>
+	<core:set value="${userSessionCtrl.init(username, secId)}" var="secId"/>
+	<core:set value="${secId.getUserName()}" var="XOGUsername"/>
+	<core:set value="${secId.getPWD()}" var="XOGPassword"/>
+	<core:set value="${secId.getSessionId()}" var="sessionID"/>
+
+	<soap:invoke endpoint="${vg_url}/niku/xog" var="xog_salida_xml">
+		<soap:message>
+			<soapenv:Envelope>
+				<soapenv:Header>
+					<xog:Auth>
+						<xog:SessionID>${sessionID}</xog:SessionID>
+					</xog:Auth>
+				</soapenv:Header>
+				<soapenv:Body>
+					<gel:include select="$XMLXOG"/>
+				</soapenv:Body>
+			</soapenv:Envelope>
+		</soap:message>
+	</soap:invoke>
+
+	<gel:set select="$xog_salida_xml/soapenv:Envelope/soapenv:Body/XOGOutput" var="xog_output"/>
+	<gel:set asString="true" select="$xog_output/Status/@state" var="stateW"/>
+	<core:if test="${stateW != 'SUCCESS'}">
+		<gel:set asString="true" select="$xog_output" var="xog_error"/>
+		<gel:log level="WARN">MENSAJE ERROR</gel:log>
+	</core:if>
+
+</core:if>
+[>END<]!$[FingerTextData FingerTextData]@#
+lanzaXOGsSinPass
+GLOBAL
+<!-- Lanzar XOG -->
+<soap:invoke endpoint="${vg_url}/niku/xog" var="xog_salida_xml">
+	<soap:message>
+		<soapenv:Envelope>
+			<soapenv:Header>
+				<xog:Auth>
+					<xog:SessionID>${vg_sessionID}</xog:SessionID>
+				</xog:Auth>
+			</soapenv:Header>
+			<soapenv:Body>
+				<gel:include select="$XMLXOG"/>
+			</soapenv:Body>
+		</soapenv:Envelope>
+	</soap:message>
+</soap:invoke>
+
+<gel:set select="$xog_salida_xml/soapenv:Envelope/soapenv:Body/XOGOutput" var="xog_output"/>
+<gel:set asString="true" select="$xog_output/Status/@state" var="stateW"/>
+<core:if test="${stateW != 'SUCCESS'}">
+	<gel:set asString="true" select="$xog_output" var="xog_error"/>
+	<gel:log level="WARN">MENSAJE ERROR</gel:log>
+</core:if>
+[>END<]!$[FingerTextData FingerTextData]@#
+lanzaXOGs
+GLOBAL
+<!-- Obtener Sesion -->
+<soap:invoke endpoint="${vg_url}/niku/xog" var="auth">
+	<soap:message>
+		<soapenv:Envelope>
+			<soapenv:Header/>
+			<soapenv:Body>
+				<xog:Login>
+					<xog:Username>${vg_user}</xog:Username>
+					<xog:Password>${vg_password}</xog:Password>
+				</xog:Login>
+			</soapenv:Body>
+		</soapenv:Envelope>
+	</soap:message>
+</soap:invoke>
+<gel:set asString="true" select="$auth/soapenv:Envelope/soapenv:Body/xog:SessionID/text()" var="sessionID"/>
+
+<!-- Lanzar XOG -->
+<soap:invoke endpoint="${vg_url}/niku/xog" var="xog_salida_xml">
+	<soap:message>
+		<soapenv:Envelope>
+			<soapenv:Header>
+				<xog:Auth>
+					<xog:SessionID>${sessionID}</xog:SessionID>
+				</xog:Auth>
+			</soapenv:Header>
+			<soapenv:Body>
+				<gel:include select="$XMLXOG"/>
+			</soapenv:Body>
+		</soapenv:Envelope>
+	</soap:message>
+</soap:invoke>
+
+<gel:set select="$xog_salida_xml/soapenv:Envelope/soapenv:Body/XOGOutput" var="xog_output"/>
+<gel:set asString="true" select="$xog_output/Status/@state" var="stateW"/>
+<core:if test="${stateW != 'SUCCESS'}">
+	<gel:set asString="true" select="$xog_output" var="xog_error"/>
+	<gel:log level="WARN">MENSAJE ERROR</gel:log>
+</core:if>
+
+<!-- Cerrar Sesion -->
+<soap:invoke endpoint="${vg_url}/niku/xog" var="logoutresult">
+	<soap:message>
+		<soapenv:Envelope>
+			<soapenv:Header>
+				<xog:Auth>
+					<xog:SessionID>${sessionID}</xog:SessionID>
+				</xog:Auth>
+			</soapenv:Header>
+			<soapenv:Body>
+				<xog:Logout/>
+			</soapenv:Body>
+		</soapenv:Envelope>
+	</soap:message>
+</soap:invoke>
+[>END<]!$[FingerTextData FingerTextData]@#
+lanzaREST_TestSessionID
+GLOBAL
+<!-- Comprobamos que la sesión sigue funcionando y si no lo regeneramos -->
+<core:set var="httpRESTURLClar">${entryURL}/ppm/rest/v1/virtual/userProfile</core:set>
+<core:if test="${debug == 1}">
+	<gel:log>httpRESTURLClar: ${httpRESTURLClar}</gel:log>
+</core:if>
+<core:new className="java.net.URL" var="remoteURLClar">
+	<core:arg type="java.lang.String" value="${httpRESTURLClar}"/>
+</core:new>
+<core:set value="${remoteURLClar.openConnection()}" var="connectionClar"/>
+<core:set value="${connectionClar.setDoInput(true)}" var="void"/>
+<core:set value="${connectionClar.setDoOutput(true)}" var="void"/>
+<core:set value="${connectionClar.setUseCaches(false)}" var="void"/>
+<core:invoke method="setRequestMethod" on="${connectionClar}">
+	<core:arg type="java.lang.String" value="GET"/>
+</core:invoke>
+<core:invoke method="setRequestProperty" on="${connectionClar}">
+	<core:arg type="java.lang.String" value="Content-Type"/>
+	<core:arg type="java.lang.String" value="application/json"/>
+</core:invoke>
+<core:invoke method="setRequestProperty" on="${connectionClar}">
+	<core:arg type="java.lang.String" value="Accept"/>
+	<core:arg type="java.lang.String" value="application/json"/>
+</core:invoke>
+<core:invoke method="setRequestProperty" on="${connectionClar}">
+	<core:arg type="java.lang.String" value="cache-control"/>
+	<core:arg type="java.lang.String" value="no-cache"/>
+</core:invoke>
+<core:invoke method="setRequestProperty" on="${connectionClar}">
+	<core:arg type="java.lang.String" value="authToken"/>
+	<core:arg type="java.lang.String" value="${vg_sessionID}"/>
+</core:invoke>
+<core:set value="${connectionClar.connect()}" var="void"/>
+<core:set value="${connectionClar.getHeaderField(0)}" var="isAuthenticated"/>
+<core:set value="${connectionClar.getResponseMessage()}" var="response_msg"/>
+<core:if test="${debug == 1}">
+	<gel:log>isAuthenticated: ${isAuthenticated}</gel:log>
+</core:if>
+<core:choose>
+	<core:when test="${isAuthenticated=='HTTP/1.1 200'}">
+	</core:when>
+	<core:otherwise>
+		<core:new className="com.niku.union.security.DefaultSecurityIdentifier" var="secId"/>
+		<core:invokeStatic className="com.niku.union.security.UserSessionControllerFactory" method="getInstance" var="userSessionCtrl"/>
+		<core:set value="${userSessionCtrl.init(cl_UserName, secId)}" var="secId"/>
+		<core:set value="${secId.getSessionId()}" var="vg_sessionID"/>
+		<core:if test="${vg_sessionID == null}">
+			<gel:log level="ERROR">No se pudo hacer login en Clarity por vg_sessionID. Comprueba los parámetros de conexión.</gel:log>
+		</core:if>
+	</core:otherwise>
+</core:choose>
+[>END<]!$[FingerTextData FingerTextData]@#
+lanzaRESTPut
+GLOBAL
+<!-- INICIO de llamada API PATCH -->
+<core:set var="httpRESTURLClar">${ClarityRestUrl}/OBJETO/${gel_objectInstanceId}</core:set>
+<core:if test="${debug == 1}">
+	<gel:log>httpRESTURLClar: ${httpRESTURLClar}</gel:log>
+</core:if>
+<core:if test="${ClarityRestUrl == '' or ClarityRestUrl == null}">
+	<gel:log>Es posible que no esten las variables de entorno.</gel:log>
+</core:if>
+<core:new className="java.net.URL" var="remoteURLClar">
+	<core:arg type="java.lang.String" value="${httpRESTURLClar}"/>
+</core:new>
+<core:set value="${remoteURLClar.openConnection()}" var="connectionClar"/>
+<core:set value="${connectionClar.setDoInput(true)}" var="void" />
+<core:set value="${connectionClar.setDoOutput(true)}" var="void" />
+<core:set value="${connectionClar.setConnectTimeout(180000)}" var="void" />
+<core:set value="${connectionClar.setReadTimeout(180000)}" var="void" />
+<core:set value="${connectionClar.setUseCaches(false)}" var="void"/>
+<core:set value="${connectionClar.setRequestMethod('PUT')}" var="void"/>
+<core:set value="${connectionClar.setRequestProperty('Content-Type', 'application/json')}" var="void"/>
+<core:set value="${connectionClar.setRequestProperty('x-api-force-patch', 'true')}" var="void"/>
+<core:set value="${connectionClar.setRequestProperty('Accept', 'application/json')}" var="void"/>
+<core:set value="${connectionClar.setRequestProperty('authToken', sessionID)}" var="void"/>
+<core:set value="${connectionClar.setRequestProperty('cache-control', 'no-cache')}" var="void"/>
+
+<core:set value="${connectionClar.connect()}" var="void"/>
+
+<core:set var="textoJSON1" escapeText="false">
+	<![CDATA[{
+	"key": "${value}"
+	, "key2": "${value2}"
+	}]]>
+</core:set>
+
+<core:set var="textoJSON1">
+	<![CDATA[{
+	  "d": [
+		{
+		  "_internalId": ${internalIDCommodityCode},
+		  "z_is_active": ${z_out_is_active},
+		  "z_is_used_by_tc": ${z_out_is_used_by_tc},
+		  "name": "${escapedCategoryCode}",
+		  "z_description": "${escapedCategoryDescription}"
+		}
+	  ],
+	  "_metadata": {
+		"_directives": {
+		  "updateReadOnlyAttrs": true
+		}
+	  }
+	}]]>
+</core:set>
+
+<core:new className="org.json.JSONObject" var="jsonEnvio">
+<core:arg type="java.lang.String" value="${textoJSON1.toString()}"/>
+</core:new>
+
+<!-- Si queremos eliminar o actualizar un valor posteriormente -->
+<core:if test="${value == null or value == ''}">
+	<core:set value="${jsonEnvio.remove('key')}" var="void"/>
+	<core:set value="${jsonEnvio.put('key', null )}" var="void"/>
+	<core:set value="${jsonEnvio.getJSONArray('d').getJSONObject(0).put('key',z_out_rank)}" var="void"/>
+</core:if>
+
+<gel:log category="INFO" level="INFO">${jsonEnvio.toString(2)}</gel:log>
+<core:set value="${jsonEnvio.toString()}" var="textoJSON"/>
+
+<core:new className="java.io.OutputStreamWriter" var="wr1">
+	<core:arg type="java.io.OutputStream" value="${connectionClar.getOutputStream()}"/>
+</core:new>
+
+<core:set var="void" value="${wr1.write(textoJSON)}"/>
+<core:set var="void" value="${wr1.flush()}"/>
+<core:set var="void" value="${wr1.close()}"/>
+
+<core:set value="${connectionClar.getResponseCode()}" var="responseCode"/>
+
+<core:choose>
+	<core:when test="${responseCode == 200}">
+		<core:if test="${debug == 1}">
+			<gel:log level="INFO">[INFO] Se ha actualizado correctamente.</gel:log>
+		</core:if>
+	</core:when>
+	<core:otherwise>
+		<core:set value="${connectionClar.getErrorStream()}" var="httpInputStream"/>
+		<core:new className="java.io.InputStreamReader" var="v_Input">
+			<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+		</core:new>
+		<core:new className="java.io.BufferedReader" var="v_InputData">
+			<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+		</core:new>
+		<core:set value="${v_InputData.readLine()}" var="errorResponse"/>
+		<core:set value="${httpInputStream.close()}" var="dummy"/>
+
+		<core:new className="org.json.JSONObject" var="jsonRespError">
+			<core:arg type="java.lang.String" value="${errorResponse}"/>
+		</core:new>
+		<core:set value="${jsonRespError.get('errorMessage')}" var="error_msg"/>
+		<gel:log level="ERROR">[ERROR] ${error_msg}</gel:log>
+		<gel:log level="WARN">responseCode: ${responseCode}</gel:log>
+		<gel:log level="WARN">textoJSON: ${textoJSON}</gel:log>
+	</core:otherwise>
+</core:choose>
+<!-- FIN de llamada API PATCH --><!-- FIN de llamada API PUT -->[>END<]!$[FingerTextData FingerTextData]@#
+lanzaRESTPost
+GLOBAL
+<!-- INICIO de llamada API POST -->
+<core:set var="httpRESTURLClar">${ClarityRestUrl}/OBJETO/</core:set>
+<core:if test="${debug == 1}">
+	<gel:log>httpRESTURLClar: ${httpRESTURLClar}</gel:log>
+</core:if>
+<core:if test="${ClarityRestUrl == '' or ClarityRestUrl == null}">
+	<gel:log>Es posible que no esten las variables de entorno.</gel:log>
+</core:if>
+<core:new className="java.net.URL" var="remoteURLClar">
+	<core:arg type="java.lang.String" value="${httpRESTURLClar}"/>
+</core:new>
+<core:set value="${remoteURLClar.openConnection()}" var="connectionClar"/>
+<core:set value="${connectionClar.setDoInput(true)}" var="void" />
+<core:set value="${connectionClar.setDoOutput(true)}" var="void" />
+<core:set value="${connectionClar.setConnectTimeout(180000)}" var="void" />
+<core:set value="${connectionClar.setReadTimeout(180000)}" var="void" />
+<core:set value="${connectionClar.setUseCaches(false)}" var="void"/>
+<core:set value="${connectionClar.setRequestMethod('POST')}" var="void"/>
+<core:set value="${connectionClar.setRequestProperty('Content-Type', 'application/json')}" var="void"/>
+<core:set value="${connectionClar.setRequestProperty('Accept', 'application/json')}" var="void"/>
+<core:set value="${connectionClar.setRequestProperty('authToken', sessionID)}" var="void"/>
+
+<core:set value="${connectionClar.connect()}" var="void"/>
+
+<core:set var="textoJSON1" escapeText="false">
+	<![CDATA[{
+	"key": "${value}"
+	, "key2": "${value2}"
+	}]]>
+</core:set>
+
+<core:new className="org.json.JSONObject" var="jsonEnvio">
+<core:arg type="java.lang.String" value="${textoJSON1.toString()}"/>
+</core:new>
+
+<!-- Si queremos eliminar o actualizar un valor posteriormente -->
+<core:if test="${empty value}">
+	<core:set value="${jsonEnvio.remove('key')}" var="void"/>
+	<core:set value="${jsonEnvio.put('key', null )}" var="void"/>
+	<core:set value="${jsonEnvio.getJSONArray('d').getJSONObject(0).put('key',z_out_rank)}" var="void"/>
+</core:if>
+
+
+<gel:log category="INFO" level="INFO">${jsonEnvio.toString(2)}</gel:log>
+<core:set value="${jsonEnvio.toString()}" var="textoJSON"/>
+
+<core:new className="java.io.OutputStreamWriter" var="wr1">
+	<core:arg type="java.io.OutputStream" value="${connectionClar.getOutputStream()}"/>
+</core:new>
+
+<core:set var="void" value="${wr1.write(textoJSON)}"/>
+<core:set var="void" value="${wr1.flush()}"/>
+<core:set var="void" value="${wr1.close()}"/>
+
+<!-- Obtenemos la resupuesta de la conexion -->
+<core:set value="${connectionClar.getResponseCode()}" var="responseCode"/>
+
+<core:choose>
+	<core:when test="${responseCode == 200}">
+		<core:if test="${debug == 1}">
+			<gel:log level="INFO">[INFO] Se ha insertado correctamente.</gel:log>
+		</core:if>
+		<core:set value="${connectionClar.getInputStream()}" var="httpInputStream"/>
+		<core:new className="java.io.InputStreamReader" var="v_Input">
+			<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+		</core:new>
+		<core:new className="java.io.BufferedReader" var="v_InputData">
+			<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+		</core:new>
+		<core:set value="${v_InputData.readLine()}" var="responseString"/>
+		<core:set value="${httpInputStream.close()}" var="dummy"/>
+
+		<core:new className="org.json.JSONObject" var="lecturaJSONResp">
+			<core:arg type="java.lang.String" value="${responseString}"/>
+		</core:new>
+		<core:set value="${lecturaJSONResp.get('_internalId')}" var="internalIDCommodityCode"/>
+		<gel:log>Inserted data with internal ID: ${internalIDCommodityCode}</gel:log>
+	</core:when>
+	<core:otherwise>
+		<core:set value="${connectionClar.getErrorStream()}" var="httpInputStream"/>
+		<core:new className="java.io.InputStreamReader" var="v_Input">
+			<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+		</core:new>
+		<core:new className="java.io.BufferedReader" var="v_InputData">
+			<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+		</core:new>
+		<core:set value="${v_InputData.readLine()}" var="errorResponse"/>
+		<core:set value="${httpInputStream.close()}" var="dummy"/>
+
+		<core:new className="org.json.JSONObject" var="jsonRespError">
+			<core:arg type="java.lang.String" value="${errorResponse}"/>
+		</core:new>
+		<core:set value="${jsonRespError.get('errorMessage')}" var="error_msg"/>
+		<gel:log level="ERROR">[ERROR] ${error_msg}</gel:log>
+		<gel:log level="WARN">responseCode: ${responseCode}</gel:log>
+		<gel:log level="WARN">textoJSON: ${textoJSON}</gel:log>
+	</core:otherwise>
+</core:choose>
+<!-- FIN de llamada API POST --><!-- FIN de llamada API POST -->[>END<]!$[FingerTextData FingerTextData]@#
+lanzaRESTGet
+GLOBAL
+<!-- INICIO de llamada API GET -->
+<core:set var="httpRESTURLClar">${ClarityRestUrl}/OBJETO/</core:set>
+<core:if test="${debug == 1}">
+	<gel:log>httpRESTURLClar: ${httpRESTURLClar}</gel:log>
+</core:if>
+<core:if test="${ClarityRestUrl == '' or ClarityRestUrl == null}">
+	<gel:log>Es posible que no esten las variables de entorno.</gel:log>
+</core:if>
+<core:new className="java.net.URL" var="remoteURLClar">
+	<core:arg type="java.lang.String" value="${httpRESTURLClar}"/>
+</core:new>
+<core:set value="${remoteURLClar.openConnection()}" var="connectionClar"/>
+<core:set value="${connectionClar.setDoInput(true)}" var="void"/>
+<core:set value="${connectionClar.setDoOutput(true)}" var="void"/>
+<core:set value="${connectionClar.setUseCaches(false)}" var="void"/>
+<core:set value="${connectionClar.setRequestMethod('PUT')}" var="void"/>
+<core:set value="${connectionClar.setRequestProperty('Content-Type', 'application/json')}" var="void"/>
+<core:set value="${connectionClar.setRequestProperty('Accept', 'application/json')}" var="void"/>
+<core:set value="${connectionClar.setRequestProperty('authToken', sessionID)}" var="void"/>
+<core:set value="${connectionClar.connect()}" var="void"/>
+
+<core:set value="${connectionClar.getResponseCode()}" var="responseCode"/>
+
+<core:choose>
+	<core:when test="${responseCode == 200}">
+		<core:if test="${debug == 1}">
+			<gel:log level="INFO">[INFO] Se ha leido correctamente.</gel:log>
+		</core:if>
+		<core:set value="${connectionClar.getInputStream()}" var="httpInputStream"/>
+		<core:new className="java.io.InputStreamReader" var="v_Input">
+			<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+		</core:new>
+		<core:new className="java.io.BufferedReader" var="v_InputData">
+			<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+		</core:new>
+		<core:set value="${v_InputData.readLine()}" var="lecturaJSON"/>
+		<core:if test="${debug == 1}">
+			<gel:log>httpData: ${lecturaJSON}</gel:log>
+		</core:if>
+		<core:set value="${httpInputStream.close()}" var="dummy"/>
+
+		
+		<core:new className="org.json.JSONObject" var="lecturaJSONResp">
+			<core:arg type="java.lang.String" value="${lecturaJSON}"/>
+		</core:new>
+
+		<core:if test="${debug == 1}">
+			<gel:log>lecturaJSONResp Class: ${lecturaJSONResp.getClass()}  lecturaJSONResp.length(): ${lecturaJSONResp.length()}</gel:log>
+			<gel:log>lecturaJSONResp: ${lecturaJSONResp.toString(2)}</gel:log>
+		</core:if>
+
+		<!-- Ejemplo de recuperación de valores (EJEMPLO) -->
+		<core:set value="${lecturaJSONResp.get('id')}" var="v_Pid"/>
+		<core:set value="${lecturaJSONResp.get('key')}" var="v_Pkey"/>
+		<core:set value="${lecturaJSONResp.get('name')}" var="v_PName"/>
+		<core:if test="${debug == 1}">
+			<gel:log>v_Pid  : 	${v_Pid}</gel:log>
+			<gel:log>v_Pkey : 	${v_Pkey}</gel:log>
+			<gel:log>v_PName: 	${v_PName}</gel:log>
+		</core:if>
+			
+		<!-- Ejemplo de eliminación de valores (EJEMPLO) -->
+		<core:set value="${lecturaJSONResp.remove('key')}" var="void"/>
+		<!-- Ejemplo de seteo a null de valores (EJEMPLO) -->
+		<core:set value="${lecturaJSONResp.put('key', null )}" var="void"/>
+
+	</core:when>
+	<core:otherwise>
+		<core:set value="${connectionClar.getErrorStream()}" var="httpInputStream"/>
+		<core:new className="java.io.InputStreamReader" var="v_Input">
+			<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+		</core:new>
+		<core:new className="java.io.BufferedReader" var="v_InputData">
+			<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+		</core:new>
+		<core:set value="${v_InputData.readLine()}" var="errorResponse"/>
+		<core:set value="${httpInputStream.close()}" var="dummy"/>
+
+		<core:new className="org.json.JSONObject" var="jsonRespError">
+			<core:arg type="java.lang.String" value="${errorResponse}"/>
+		</core:new>
+		<core:set value="${jsonRespError.get('errorMessage')}" var="error_msg"/>
+		<gel:log level="ERROR">[ERROR] ${error_msg}</gel:log>
+		<gel:log level="WARN">isAuthenticated: ${isAuthenticated}</gel:log>
+		<gel:log level="WARN">lecturaJSONResp: ${lecturaJSONResp.toString(2)}</gel:log>
+	</core:otherwise>
+</core:choose>
+<!-- FIN de llamada API GET -->[>END<]!$[FingerTextData FingerTextData]@#
+lanzaREST-EliminarAtributo
+GLOBAL
+<core:set escapeText="false" var="textoJSON1"><![CDATA[
+{
+	"i_selecc_subproceso" : "${i_selecc_subproceso}",
+}]]></core:set>
+
+<core:new className="org.json.JSONObject" var="jsonEnvio">
+<core:arg type="java.lang.String" value="${textoJSON1.toString()}"/>
+</core:new>
+<core:if test="${i_selecc_subproceso == null or i_selecc_subproceso == ''}">
+<core:set value="${jsonEnvio.remove('i_selecc_subproceso')}" var="void"/>
+</core:if>
+
+<gel:log category="INFO" level="INFO">${jsonEnvio.toString(2)}</gel:log>
+<core:set value="${jsonEnvio.toString()}" var="textoJSON"/>[>END<]!$[FingerTextData FingerTextData]@#
+iframeJaspersoftGetID
+GLOBAL
+<script>
+
+function parseParam(url, strParamName) {
+    var strParamName = strParamName.replace(new RegExp('/[\[]/'), '\\\[').replace(new RegExp('/[\]]/'), '\\\]');
+    var regexS = "[\\#?&]" + strParamName + "[:=]([^&#]*)";
+    var regex = new RegExp(regexS);
+    var results = regex.exec(url);
+    if (results === null) {
+        return "";
+    } else {
+        return results[1];
+    }
+}
+
+function getURLParam(strParam) {
+    return parseParam(window.location.href, strParam);
+}
+
+function ejecutarJS(){ 
+var valor = getURLParam("id")
+console.log(valor)
+var div = document.getElementById("frame")
+div.setAttribute("src", "https://consum.odpe.com/reportservice/flow.html?_flowId=viewReportFlow&reportUnit=%2Fshared%2Freports%2FModelo_fisico_de_supermercado%2FMobiliario_de_exposicion_Supermercado&standAlone=true&ParentFolderUri=/shared/reports/Modelo_fisico_de_supermercado&p_invId="+valor)
+div.setAttribute("onload", "")
+}
+</script>
+
+<iframe id="frame" onload="ejecutarJS()" width="100%"height="1000px"id="frame"src="">
+</iframe>
+[>END<]!$[FingerTextData FingerTextData]@#
+gel_processInstanceId
+GLOBAL
+${gel_processInstanceId}[>END<]!$[FingerTextData FingerTextData]@#
+gel_processId
+GLOBAL
+${gel_processId}[>END<]!$[FingerTextData FingerTextData]@#
+gel_objectInstanceId
+GLOBAL
+${gel_objectInstanceId}[>END<]!$[FingerTextData FingerTextData]@#
+gelSleepProcess
+GLOBAL
+<!-- duerme el proceso 10 segundos para que acabe de escribir el script anterior -->
+<core:set value="10000" var="v_sleep_ms"/>
+<util:sleep millis="${v_sleep_ms}"/>
+[>END<]!$[FingerTextData FingerTextData]@#
+gelSerializarFichero
+GLOBAL
+<gel:serialize fileName="//${PATH}/${FILE_NAME}.xml" var="${PARSE}"/>[>END<]!$[FingerTextData FingerTextData]@#
+gelParse
+GLOBAL
+<!-- Parseo de la intancia a escribir -->
+<gel:parse var="p_instancia">
+    <NikuDataBus xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="/niku/xog/src/webroot/WEB-INF/xog/xsd/nikuxog_read.xsd">
+		<Header action="read" externalSource="NIKU" objectType="XXX_objeto" version="8.0"/>
+		<Query>
+			<Filter criteria="EQUALS" name="XXX">${v_param_1}</Filter>
+		</Query>
+	</NikuDataBus>
+</gel:parse>
+<core:if test="${debug == 1}">
+    <gel:set asString="true" select="$p_instancia" var="p_instancia_str"/>
+    <gel:log level="DEBUG" category="DEBUG - p_instancia" message="${p_instancia_str}"/>  
+</core:if>[>END<]!$[FingerTextData FingerTextData]@#
+gelInsert
+GLOBAL
+<gel:set insert="true" select="$VARIABLEXML/NikuDataBus/LOQUESEA" value="${VARIABLEXMLAINSERTAR}"/>[>END<]!$[FingerTextData FingerTextData]@#
+gelEjecutarProceso
+GLOBAL
+<gel:script xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:bpm="jelly:com.niku.bpm.gel.BPMTagLibrary" xmlns:core="jelly:core"
+  xmlns:gel="jelly:com.niku.union.gel.GELTagLibrary" xmlns:sql="jelly:sql" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<gel:parameter var="p_processCode"/>
+	<gel:parameter default="admin" var="p_startAsUser"/>
+	<gel:setDataSource dbId="niku"/>
+	<core:catch var="e_general_exception">
+		<!-- Extract the userid, make sure the user exists -->
+		<sql:query escapeText="false" var="q_info_user">
+			<![CDATA[
+				SELECT id 
+				FROM CMN_SEC_USERS 
+				WHERE user_name = ?
+			]]>
+			<sql:param value="${p_startAsUser}"/>
+		</sql:query>
+		<core:choose>
+			<core:when test="${q_info_user.rowCount &lt;= 0}">
+				<gel:log level="WARN" category="ERROR - q_info_user">Unable to start process ${p_processCode} as ${p_startAsUser}: user does not exist</gel:log>
+			</core:when>
+			<core:otherwise>
+				<core:forEach items="${q_info_user.rowsByIndex}" var="info_user">
+					<core:set value="${info_user[0]}" var="v_user_id"/>
+					<gel:log level="INFO">Preparing to launch process ${p_processCode} as ${p_startAsUser} (userId = ${v_user_id})</gel:log>
+				</core:forEach>
+				<core:if test="${p_processCode != null}">
+					<!-- Query for the version id of the process we're trying to launch we assume we're launching the next process on the same object we're executing on currently -->
+					<sql:query escapeText="false" var="q_info_proceso">
+						<![CDATA[
+							SELECT v.id
+							FROM
+								BPM_DEF_PROCESSES p
+								, BPM_DEF_PROCESS_VERSIONS v
+							WHERE p.process_code = ?
+							AND p.id = v.process_id
+							AND v.version_no = 1
+						]]>
+						<sql:param value="${p_processCode}"/>
+					</sql:query>
+					<core:choose>
+						<core:when test="${q_info_proceso.rowCount &lt;= 0}">
+							<gel:log level="WARN" category="ERROR - q_info_proceso">Unable to start process ${p_processCode} as ${p_startAsUser}: process does not exist</gel:log>
+						</core:when>
+						<core:otherwise>
+							<core:forEach items="${q_info_proceso.rowsByIndex}" var="info_proceso">
+								<core:set value="${info_proceso[0]}" var="v_process_id"/>
+								<gel:log level="INFO">Preparing to launch process ${p_processCode} as ${p_startAsUser} (processId = ${v_process_id})</gel:log>
+							</core:forEach>
+							<!-- Execute the process -->
+							<bpm:startProcess initObjectId="${gel_objectInstanceId}" initObjectKey="XXX_changeit_XXX" initUserId="${v_user_id}" processVersionId="${v_process_id}"/>
+						</core:otherwise>
+					</core:choose>
+				</core:if>
+			</core:otherwise>
+		</core:choose>
+	</core:catch>
+	<core:choose>
+		<core:when test="${e_general_exception != NULL}">
+			<gel:log level="ERROR" category="ERROR - e_general_exception" message=" GENERAL EXCEPTION: ${e_general_exception}"/>
+		</core:when>
+		<core:otherwise>
+			<gel:log level="INFO" category="INFO" message=" Script finalizado con exito."/>
+		</core:otherwise>
+	</core:choose>
+</gel:script>[>END<]!$[FingerTextData FingerTextData]@#
+gelCabeceraXML
+GLOBAL
+<gel:script xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:bpm="jelly:com.niku.bpm.gel.BPMTagLibrary" xmlns:core="jelly:core"
+  xmlns:email="jelly:email" xmlns:file="jelly:com.niku.union.gel.FileTagLibrary" xmlns:gel="jelly:com.niku.union.gel.GELTagLibrary"
+  xmlns:racemedy="urn:HelpDesk_Query_Service" xmlns:rem="jelly:com.niku.union.gel.RemedyTagLibrary"
+  xmlns:soap="jelly:com.niku.union.gel.SOAPTagLibrary" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+  xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sql="jelly:sql" xmlns:util="jelly:util"
+  xmlns:x="jelly:org.apache.commons.jelly.tags.xml.XMLTagLibrary" xmlns:xog="http://www.niku.com/xog" xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:MCh="jelly:eu.mesmerizedChild.commons.jelly.MChTagLibrary">
+	<!-- Inicializar fuente de datos BBDD Clarity -->
+	<gel:setDataSource dbId="Niku"/>
+	<core:catch var="e_general_exception">
+		
+		
+		
+		
+		
+	</core:catch>
+	<core:choose>
+		<core:when test="${e_general_exception == NULL}">
+			<gel:log level="INFO" category="SUCCESS - End Script" message=" Script finished with success."/>
+		</core:when>
+		<core:otherwise>
+			<gel:log level="WARN" category="ERROR - e_general_exception" message=" GENERAL EXCEPTION: ${e_general_exception}"/>
+		</core:otherwise>
+	</core:choose>
+</gel:script>
+[>END<]!$[FingerTextData FingerTextData]@#
+aplicarTransformada
+GLOBAL
+xmlns:x="jelly:org.apache.commons.jelly.tags.xml.XMLTagLibrary"
+
+<gel:parse var="xog_xsl">
+	<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+		<xsl:output encoding="UTF-8" indent="yes" media-type="xml" method="xml" omit-xml-declaration="yes"/>
+		<xsl:output cdata-section-elements="description"/>
+		<xsl:output cdata-section-elements="note"/>
+		<xsl:strip-space elements="*"/>
+		<!-- TRANSFORMADA -->
+	</xsl:stylesheet>
+</gel:parse>
+<x:parse var="src_xsl">
+	<gel:include select="$xog_xsl"/>
+</x:parse>
+<x:parse var="testdata">
+	<gel:include select="$xog_salida_xml/soapenv:Envelope/soapenv:Body/NikuDataBus"/>
+</x:parse>
+<gel:parse var="xog_transformado">
+	<x:transform xml="${testdata}" xslt="${src_xsl}"/>
+</gel:parse>[>END<]!$[FingerTextData FingerTextData]@#
+Z_ChuletaXPath
+GLOBAL
+<!--
+Chuleta XPath:
+------------------------------------------------------------------------------------------------------------------
+Expression    Description
+nodename		Selects all nodes with the name "nodename"
+/				Selects from the root node
+//				Selects nodes in the document from the current node that match the selection no matter where they are
+.				Selects the current node
+..				Selects the parent of the current node
+@				Selects attributes
+------------------------------------------------------------------------------------------------------------------
+Path Expression        Result
+bookstore				Selects all nodes with the name "bookstore"
+/bookstore				Selects the root element bookstore. [Note: If the path starts with a slash ( / ) it always represents an absolute path to an element!]
+bookstore/book			Selects all book elements that are children of bookstore
+//book					Selects all book elements no matter where they are in the document
+bookstore//book			Selects all book elements that are descendant of the bookstore element, no matter where they are under the bookstore element
+//@lang					Selects all attributes that are named lang
+------------------------------------------------------------------------------------------------------------------
+Path Expression                        Result
+/bookstore/book[1]						Selects the first book element that is the child of the bookstore element.
+/bookstore/book[last()]					Selects the last book element that is the child of the bookstore element
+/bookstore/book[last()-1]				Selects the last but one book element that is the child of the bookstore element
+/bookstore/book[position()<3]			Selects the first two book elements that are children of the bookstore element
+//title[@lang]							Selects all the title elements that have an attribute named lang
+//title[@lang='en']						Selects all the title elements that have a "lang" attribute with a value of "en"
+/bookstore/book[price>35.00]			Selects all the book elements of the bookstore element that have a price element with a value greater than 35.00
+/bookstore/book[price>35.00]/title		Selects all the title elements of the book elements of the bookstore element that have a price element with a value greater than 35.00
+------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------
+Wildcard            Description
+*						Matches any element node
+@*						Matches any attribute node
+node()					Matches any node of any kind
+------------------------------------------------------------------------------------------------------------------
+Path Expression        Result
+/bookstore/*			Selects all the child element nodes of the bookstore element
+//*						Selects all elements in the document
+//title[@*]				Selects all title elements which have at least one attribute of any kind
+------------------------------------------------------------------------------------------------------------------
+Path Expression                        Result
+//book/title | //book/price				Selects all the title AND price elements of all book elements
+//title | //price						Selects all the title AND price elements in the document
+/bookstore/book/title | //price			Selects all the title elements of the book element of the bookstore element AND all the price elements in the document
+------------------------------------------------------------------------------------------------------------------
+-->[>END<]!$[FingerTextData FingerTextData]@#
+XOG_logout
+GLOBAL
+<!-- LOGOUT -->
+<core:catch var="e_logout_exception">
+	<soap:invoke endpoint="${vg_xog_url}/niku/xog" var="logoutresult">
+		<soap:message>
+			<soapenv:Envelope>
+				<soapenv:Header>
+					<xog:Auth>
+						<xog:SessionID>${sessionID}</xog:SessionID>
+					</xog:Auth>
+				</soapenv:Header>
+				<soapenv:Body>
+					<xog:Logout/>
+				</soapenv:Body>
+			</soapenv:Envelope>
+		</soap:message>
+	</soap:invoke>
+</core:catch>
+<core:if test="${e_logout_exception != NULL}">
+	<gel:log level="WARN" category="ERROR - e_logout_exception" message=" LOGOUT EXCEPTION: ${e_logout_exception}"/>
+</core:if>
+[>END<]!$[FingerTextData FingerTextData]@#
+XOG_login_session
+GLOBAL
+<!-- LOGIN -->
+<core:catch var="e_login_exception">
+	<core:set value="admin" var="username"/>
+	<core:new className="com.niku.union.security.DefaultSecurityIdentifier" var="secId"/>
+	<core:invokeStatic className="com.niku.union.security.UserSessionControllerFactory" method="getInstance" var="userSessionCtrl"/>
+	<core:set value="${userSessionCtrl.init(username, secId)}" var="secId"/>
+	<core:set value="${secId.getSessionId()}" var="sessionID"/>
+	<core:choose>
+		<core:when test="${sessionID == null}">
+			<gel:log level="ERROR">Cannot login to Clarity XOG. Check username.</gel:log>
+		</core:when>
+		<core:otherwise>
+			<core:if test="${DEBUG == 1}">
+				<gel:log>SessionID: ${sessionID}</gel:log>
+			</core:if>
+		</core:otherwise>
+	</core:choose>
+</core:catch>
+<core:if test="${e_login_exception != NULL}">
+	<gel:log level="WARN" category="ERROR - e_login_exception" message=" LOGIN EXCEPTION: ${e_login_exception}"/>
+</core:if>
+[>END<]!$[FingerTextData FingerTextData]@#
+XOG_login
+GLOBAL
+<!-- LOGIN -->
+<core:catch var="e_login_exception">
+	<soap:invoke endpoint="${vg_xog_url}/niku/xog" var="auth">
+		<soap:message>
+			<soapenv:Envelope>
+				<soapenv:Header/>
+				<soapenv:Body>
+					<xog:Login>
+						<xog:Username>${vg_xog_user}</xog:Username>
+						<xog:Password>${vg_xog_pass}</xog:Password>
+					</xog:Login>
+				</soapenv:Body>
+			</soapenv:Envelope>
+		</soap:message>
+	</soap:invoke>
+</core:catch>
+<core:choose>
+	<core:when test="${e_login_exception != NULL}">
+		<gel:log level="WARN" category="ERROR - e_login_exception" message=" LOGIN EXCEPTION: ${e_login_exception}"/>
+	</core:when>
+	<core:otherwise>
+		<!-- Obtener SessionId -->
+		<gel:set asString="true" select="$auth/soapenv:Envelope/soapenv:Body/xog:SessionID/text()" var="sessionID"/>
+		<!-- Comprueba si se ha iniciado sesión -->
+		<core:choose>
+			<core:when test="${sessionID == null}">
+				<core:new className="com.niku.union.security.DefaultSecurityIdentifier" var="secId"/>
+				<core:invokeStatic className="com.niku.union.security.UserSessionControllerFactory" method="getInstance" var="userSessionCtrl"/>
+				<core:set value="${userSessionCtrl.init(username, secId)}" var="secId"/>
+				<core:set value="${secId.getSessionId()}" var="sessionID"/>
+				<gel:log level="WARN" category="ERROR - sessionID" message=" No se ha podido iniciar sesion por XOG."/>
+			</core:when>
+			<core:otherwise>
+			
+			
+			</core:otherwise>
+		</core:choose>
+	</core:otherwise>
+</core:choose>
+[>END<]!$[FingerTextData FingerTextData]@#
+XOG_insert_xpath
+GLOBAL
+<gel:set insert="true" select="$x_xog_base/XXX_xpath" value="${x_xog_node}"/>
+[>END<]!$[FingerTextData FingerTextData]@#
+XOG_autonumber
+GLOBAL
+<args name="overrideAutoNumbering" value="false"/>[>END<]!$[FingerTextData FingerTextData]@#
+XOG_DOCUMENTSREAD_PRJ
+GLOBAL
+<?xml version="1.0" encoding="UTF-8"?>
+<NikuDataBus xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../xsd/nikuxog_read.xsd">
+	<Header version="7.5" action="read" objectType="document" externalSource="NIKU">
+		<args name="documentLocation" value="D:\niku\main\build/xog/test/documentXogLocation" />
+	</Header>
+	<DocumentQuery>
+		<Filter name="parentObjectID" criteria="EQUALS">5012002</Filter>
+		<Filter name="parentObjectType" criteria="EQUALS">Projects</Filter>
+	</DocumentQuery>
+</NikuDataBus>[>END<]!$[FingerTextData FingerTextData]@#
+URL_Entorno
+GLOBAL
+<sql:query escapeText="0" var="oneResult">
+	<![CDATA[
+			SELECT 
+	 CAST(REPLACE(REPLACE(CAST(P.VALUE AS NVARCHAR(MAX)),'utf-8','utf-16'), '&', '&') AS XML).query('data(/properties/webServer/webServerInstance[@id="app"]/@sslEntryUrl)') entryURL
+	FROM CMN_CONFIG P
+	WHERE P.NAME = 'properties.xml'
+]]></sql:query>
+<core:set value="${oneResult.rows[0].entryURL}" var="url_entorno"/>	[>END<]!$[FingerTextData FingerTextData]@#
+UPDATE_OnHoldInvestments
+GLOBAL
+<sql:query escapeText="0" var="q_invId">
+    <![CDATA[
+        SELECT
+            id 
+        FROM
+            inv_investments
+        WHERE  
+                code IN ('AP00021001','AP22054')
+            AND odf_object_code = 'application'
+    ]]>
+</sql:query>
+<core:choose>
+    <core:when test="${q_invId.rowCount &lt;= 0}">
+        <gel:log level="WARN" category="ERROR - q_invId" message="La consulta 'q_invId' no ha devuelto resultados"/>
+    </core:when>
+    <core:otherwise>
+        <core:forEach items="${q_invId.rowsByIndex}" trim="true" var="row">
+            <core:set value="${row[0]}" var="invID"/>
+            <sql:update escapeText="false" var="upd_finStatus">
+                <![CDATA[
+                    UPDATE 
+                        pac_mnt_projects
+                    SET 
+                        status = 'H'
+                    WHERE 
+                        id = ${invID}
+                ]]>
+            </sql:update>
+            <sql:update escapeText="false" var="upd_actPurg">
+                <![CDATA[
+                    UPDATE 
+                        inv_investments
+                    SET 
+                        is_active = 0
+                        ,purge_flag = 1
+                    WHERE 
+                        id = ${invID}
+                ]]>
+            </sql:update>
+        </core:forEach>
+    </core:otherwise>
+</core:choose>[>END<]!$[FingerTextData FingerTextData]@#
+SQL_Update
+GLOBAL
+<core:set value="0" var="errorCount"/>
+<sql:transaction>
+    <core:catch var="error">
+        <sql:update escapeText="0" var="totalUpdates">
+            <![CDATA[/*sql*/
+                UPDATE TABLA
+                SET COLUMNA1 = LOQUESEA,
+                    COLUMNA2 = LOQUESEA2
+                WHERE id = ?
+                ]]>
+            <sql:param value="${gel_objectInstanceId}"/>
+        </sql:update>
+    </core:catch>
+    <core:if test="${error != null}">
+        <core:set value="1" var="errorCount"/>
+    </core:if>
+    <!-- COMMIT OR ROLLBACK SQL TRANSACTION -->
+    <core:choose>
+        <core:when test="${errorCount == 0}">
+            <!-- COMMIT TRANSACTION -->
+            <sql:update>COMMIT</sql:update>
+            <gel:log level="INFO">Se han actualizado un total de ${totalUpdates} filas</gel:log>
+        </core:when>
+        <core:otherwise>
+            <!-- ROLLBACK TRANSACTION -->
+            <sql:update>ROLLBACK</sql:update>
+            <gel:log level="WARN">SQL Error</gel:log>
+            <gel:log level="WARN">SQL Output: ${error}</gel:log>
+        </core:otherwise>
+    </core:choose>
+</sql:transaction>[>END<]!$[FingerTextData FingerTextData]@#
+SQL_QuerySencilla
+GLOBAL
+<sql:query var="v_query">
+	<![CDATA[
+	select ALIASTABLA.COLUMNA ALIASCOLUMNA1, ALIASTABLA.COLUMNA ALIASCOLUMNA2, ALIASTABLA.COLUMNA ALIASCOLUMNA3
+	from TABLA ALIASTABLA
+	where ALIASTABLA.COLUMNA = ?
+	]]>
+	<sql:param value="${gel_objectInstanceId}"/>
+</sql:query>
+<core:set var="VARIABLEXOG1" value="${v_query.rows[0].ALIASCOLUMNA1}"/>
+<core:set var="VARIABLEXOG2" value="${v_query.rows[0].ALIASCOLUMNA2}"/>
+<core:set var="VARIABLEXOG3" value="${v_query.rows[0].ALIASCOLUMNA3}"/>
+[>END<]!$[FingerTextData FingerTextData]@#
+SQL_QueryForEach
+GLOBAL
+<!-- XXX_Comentario_del_select -->
+<sql:query escapeText="false" var="q_nombre_select">
+	<![CDATA[
+		SELECT *
+		FROM DUAL
+	]]>
+	<sql:param value="${parametro1}"/>
+</sql:query>
+<core:choose>
+	<core:when test="${q_nombre_select.rowCount &lt;= 0}">
+		<gel:log level="WARN" category="ERROR - q_nombre_select">XXX_Texto_del_error_por_no_encontrar_resultados</gel:log>
+	</core:when>
+	<core:otherwise>
+		<core:forEach items="${q_nombre_select.rowsByIndex}" var="nombre_select">
+			<core:set value="${nombre_select[0]}" var="v_var_1"/>
+			<core:set value="${nombre_select[1]}" var="v_var_2"/>
+			<core:set value="${nombre_select[2]}" var="v_var_3"/>
+		</core:forEach>
+		
+		
+	</core:otherwise>
+</core:choose>
+[>END<]!$[FingerTextData FingerTextData]@#
+SQL_FormatosFecha
+GLOBAL
+DECLARE @now datetime
+SET @now = GETDATE()
+SELECT CONVERT(nvarchar(MAX), @now, 0) AS output, 0 AS style
+UNION SELECT FORMAT(@now, 'yyyy-MM-ddTHH:mm:ss'), 0
+UNION SELECT FORMAT(GETDATE(), 'yyyy-MM-ddTHH:mm:ss'),0
+UNION SELECT CONVERT(nvarchar(MAX), @now, 1), 1
+UNION SELECT CONVERT(nvarchar(MAX), @now, 2), 2
+UNION SELECT CONVERT(nvarchar(MAX), @now, 3), 3
+UNION SELECT CONVERT(nvarchar(MAX), @now, 4), 4
+UNION SELECT CONVERT(nvarchar(MAX), @now, 5), 5
+UNION SELECT CONVERT(nvarchar(MAX), @now, 6), 6
+UNION SELECT CONVERT(nvarchar(MAX), @now, 7), 7
+UNION SELECT CONVERT(nvarchar(MAX), @now, 8), 8
+UNION SELECT CONVERT(nvarchar(MAX), @now, 9), 9
+UNION SELECT CONVERT(nvarchar(MAX), @now, 10), 10
+UNION SELECT CONVERT(nvarchar(MAX), @now, 11), 11
+UNION SELECT CONVERT(nvarchar(MAX), @now, 12), 12
+UNION SELECT CONVERT(nvarchar(MAX), @now, 13), 13
+UNION SELECT CONVERT(nvarchar(MAX), @now, 14), 14
+--15 to 19 not valid
+UNION SELECT CONVERT(nvarchar(MAX), @now, 20), 20
+UNION SELECT CONVERT(nvarchar(MAX), @now, 21), 21
+UNION SELECT CONVERT(nvarchar(MAX), @now, 22), 22
+UNION SELECT CONVERT(nvarchar(MAX), @now, 23), 23
+UNION SELECT CONVERT(nvarchar(MAX), @now, 24), 24
+UNION SELECT CONVERT(nvarchar(MAX), @now, 25), 25
+--26 to 99 not valid
+UNION SELECT CONVERT(nvarchar(MAX), @now, 100), 100
+UNION SELECT CONVERT(nvarchar(MAX), @now, 101), 101
+UNION SELECT CONVERT(nvarchar(MAX), @now, 102), 102
+UNION SELECT CONVERT(nvarchar(MAX), @now, 103), 103
+UNION SELECT CONVERT(nvarchar(MAX), @now, 104), 104
+UNION SELECT CONVERT(nvarchar(MAX), @now, 105), 105
+UNION SELECT CONVERT(nvarchar(MAX), @now, 106), 106
+UNION SELECT CONVERT(nvarchar(MAX), @now, 107), 107
+UNION SELECT CONVERT(nvarchar(MAX), @now, 108), 108
+UNION SELECT CONVERT(nvarchar(MAX), @now, 109), 109
+UNION SELECT CONVERT(nvarchar(MAX), @now, 110), 110
+UNION SELECT CONVERT(nvarchar(MAX), @now, 111), 111
+UNION SELECT CONVERT(nvarchar(MAX), @now, 112), 112
+UNION SELECT CONVERT(nvarchar(MAX), @now, 113), 113
+UNION SELECT CONVERT(nvarchar(MAX), @now, 114), 114
+UNION SELECT CONVERT(nvarchar(MAX), @now, 120), 120
+UNION SELECT CONVERT(nvarchar(MAX), @now, 121), 121
+--122 to 125 not valid
+UNION SELECT CONVERT(nvarchar(MAX), @now, 126), 126
+UNION SELECT CONVERT(nvarchar(MAX), @now, 127), 127
+--128, 129 not valid
+UNION SELECT CONVERT(nvarchar(MAX), @now, 130), 130
+UNION SELECT CONVERT(nvarchar(MAX), @now, 131), 131
+--132 not valid
+ORDER BY style[>END<]!$[FingerTextData FingerTextData]@#
+SQL_Delete
+GLOBAL
+<!-- Establish variable to count errors -->
+<core:set value="0" var="errorCount"/>
+<!-- Begin transaction to delete in TABLE_NAME -->
+<sql:transaction>
+	<!-- Delete in TABLE_NAME -->
+	<core:catch var="error">
+		<sql:update escapeText="0" var="totalDeletes">
+			<![CDATA[/*sql*/
+				DELETE FROM TABLE_NAME 
+				WHERE field = ?
+			]]>
+			<sql:param value="${gel_objectInstanceId}"/>
+		</sql:update>
+	</core:catch>
+	<core:if test="${error != null}">
+		<core:set value="1" var="errorCount"/>
+	</core:if>
+	<!-- COMMIT OR ROLLBACK SQL TRANSACTION -->
+	<core:choose>
+		<core:when test="${errorCount == 0}">
+			<!-- COMMIT TRANSACTION -->
+			<sql:update>COMMIT</sql:update>
+			<gel:log level="INFO">Deleted ${totalDeletes} row(s)</gel:log>
+		</core:when>
+		<core:otherwise>
+			<!-- ROLLBACK TRANSACTION -->
+			<sql:update>ROLLBACK</sql:update>
+			<gel:log level="ERROR">SQL Error</gel:log>
+			<gel:log level="WARN">SQL Output: ${error}</gel:log>
+		</core:otherwise>
+	</core:choose>
+</sql:transaction>
+[>END<]!$[FingerTextData FingerTextData]@#
+SQL_AutonumericoProcedure
+GLOBAL
+<!-- EJECUCION DEL PROCEDURE EN GEL SCRIPT -->
+
+<sql:update escapeText="false" var="nrParentFields">
+  DECLARE
+   P_OBJECT_CODE VARCHAR2(200);
+   P_ATTRIBUTE_CODE VARCHAR2(200);
+   P_PARTITION_CODE VARCHAR2(200);
+   P_TABLE_NAME VARCHAR2(200);
+   P_COLUMN_NAME VARCHAR2(200);
+   P_PARENT_REFERENCE_ATTR VARCHAR2(200);
+   P_PARENT_PK NUMBER;
+   P_NEXT_ID VARCHAR2(200);
+  BEGIN
+   P_OBJECT_CODE := 'nombre_del_objeto';
+   P_ATTRIBUTE_CODE := 'codigo_del_atributo';
+   P_PARTITION_CODE := 'codigo_de_particion';
+   P_TABLE_NAME := 'tabla_del_objeto';
+   P_COLUMN_NAME := 'columna_de_tabla_de_objeto';
+   P_PARENT_REFERENCE_ATTR := '';
+   P_PARENT_PK := 5000000;
+
+ 
+  CMN_AUTONUM_GET_NEXT_SP(
+   P_OBJECT_CODE => P_OBJECT_CODE,
+   P_ATTRIBUTE_CODE => P_ATTRIBUTE_CODE,
+   P_PARTITION_CODE => P_PARTITION_CODE,
+   P_TABLE_NAME => P_TABLE_NAME,
+   P_COLUMN_NAME => P_COLUMN_NAME,
+   P_PARENT_REFERENCE_ATTR => P_PARENT_REFERENCE_ATTR,
+   P_PARENT_PK => P_PARENT_PK,
+   P_NEXT_ID => P_NEXT_ID
+   );
+  END;
+</sql:update>
+
+<!-- OBTENCION DEL NUEVO VALOR -->
+
+<sql:query var="MAIN_A">
+  select  NEXT_VALUE
+  from CMN_AUTONUM_SCHEMES
+  where OBJECT_CODE='nombre_de_objeto'
+  and ATTRIBUTE_CODE='codigo_de_atributo'
+  and PARTITION_CODE='codigo_de_particion'
+</sql:query>
+[>END<]!$[FingerTextData FingerTextData]@#
+REST_NAVEGADOR_LLAMADA
+GLOBAL
+function getCookie(cookieName) {
+    var name = cookieName + "=";
+    var cookieData = document.cookie.split(';');
+    for (var i = 0; i < cookieData.length; i++) {
+        var cookie = cookieData[i];
+        while (cookie.charAt(0) == ' ') {
+            cookie = cookie.substring(1);
+        }
+        if (cookie.indexOf(name) == 0) {
+            return cookie.substring(name.length, cookie.length);
+        }
+    }
+    return "";
+}
+function ppmRest(url,type,json){
+    var host = location.protocol + '//' + location.hostname + (location.port ? ':' + location.port : '');
+    var xhttp = new XMLHttpRequest();
+    xhttp.onreadystatechange = function () {
+        if (this.readyState == 4 && this.status == 200) {
+            console.log(this.responseText);
+            console.log("BIEN");
+        }
+        if (this.readyState == 4 && this.status >= 400) {
+            console.log("MAL");
+        }
+    };
+    //debugger
+    var t=type==null?"GET":type;
+    var uri = host+=url;
+    xhttp.open(t, uri);
+    xhttp.setRequestHeader("Content-type", "application/json");
+    xhttp.setRequestHeader("Accept", "application/json");
+    xhttp.setRequestHeader("cache-control", "no-cache");
+    xhttp.setRequestHeader("Authorization", getCookie("sessionId"));
+    if(json!=null){
+        json = typeof json=="object"?JSON.stringify(json):json;
+        xhttp.send(json);
+    }else{
+        xhttp.send();
+    }
+}
+ppmRest('/ppm/rest/v1/projects/6893001/tasks/7480065', 'POST', '{"mustStartOnDate": "2022-05-30T08:00:00","mustFinishOnDate": "2022-07-17T17:00:00"}')[>END<]!$[FingerTextData FingerTextData]@#
+PermisosListadoQuery
+GLOBAL
+SELECT  *
+      FROM     CMN_SEC_GROUPS
+      --WHERE GROUP_CODE = 'odf_cst_project_create_cop_prj_statusrpt'
+ORDER BY GROUP_CODE ;
+
+SELECT
+	DISTINCT a.right_id,
+	g.right_type,
+	g.description description,
+	o.name right_type_name,
+	g.group_name right_name,
+	g.group_code,
+	g.is_automatic
+FROM
+	cmn_sec_assgnd_obj_perm a,
+	cmn_sec_groups_v g,
+	odf_objects_v o
+WHERE
+	--a.principal_id = 5000108
+	--resource internal ID
+	 a.principal_type = 'USER'
+	AND a.right_id = g.id
+	AND g.right_type = o.right_code
+	AND g.language_code = 'es'
+	AND o.language_code = 'es'
+	AND g.is_active = 1
+	--AND group_code = 'odf_cst_project_create_cop_prj_statusrpt'
+ORDER BY
+	right_name;
+	
+	SELECT r.right_id
+, g.group_name right_name
+, g.group_code right_code
+, r.permission_code
+, g.description right_description
+, g.lic_right_type
+, g.is_automatic
+, g.language_code
+FROM cmn_sec_groups_v g
+, cmn_sec_right r
+WHERE
+g.ID = r.right_id
+AND g.right_type IS NOT NULL
+AND g.is_active = 1
+AND g.language_code = 'en'
+ORDER BY permission_code, right_name;
+[>END<]!$[FingerTextData FingerTextData]@#
+ParametrosNSQL
+GLOBAL
+----- PASO PARÁMETROS -----
+Hay dos modos de paso, para un solo valor o para varios. 
+ 
+Un valor:
+@WHERE:PARAM:USER_DEF:<data type>:<param name>
+      --> <data type> can be STRING, INTEGER, FLOAT, DATE, or MONEY.
+      --> <param name> is a placeholder for the value that will be inserted, which will normally, but not necessarily, come from a lookup.
+ 
+Ejemplo: WHERE i.id = @WHERE:PARAM:USER_DEF:INTEGER:p_project_id@
+ 
+Varios valores:
+@WHERE:PARAM:USER_DEF:<data type>:<column_name>:<param name>@
+      --> <data type> is the same as for the single value variant and can include STRING, INTEGER, FLOAT, DATE, or MONEY.
+      --> <column name> is the value that the list supplied will be checked against. At run time, this clause expands to an IN (...) list.
+      --> <param name> is a placeholder for the list that comes in and again will normally come from a lookup.
+ 
+Ejemplo: WHERE @WHERE:PARAM:USER_DEF:INTEGER:i.id:p_project_id_list@
+ 
+ 
+----- CONTROL SEGURIDAD -----
+@WHERE:SECURITY:<entity type>:<entity_id>
+      --> <entity type> is the object name on which security is required. For example, if security is required for projects, enter an <entity type> of PROJECT, or enter RESOURCE for resources.
+      --> <entity ID> defines the column name appropriate for the security required. For example, for projects, the <entity_id> is INV_INVESTMENTS.ID or a column with the same value. For resources, it is SRM_RESOURCES.ID.
+ 
+ 
+----- RECOGER VALORES URL -----
+@WHERE:PARAM:XML:<data type>:/data/<param_name>/@value@
+      --> <data type> can only be STRING or INTEGER.
+      --> <param name> is the identifier from the underlying URL that will be extracted.
+Nota: "param_name" debe ser la variable que contiene la URL.
+ 
+Ejemplo: @WHERE:PARAM:XML:INTEGER:/data/id/@value@
+ 
+ 
+----- PARÁMETROS DEL USUARIO -----
+@WHERE:PARAM:<parameter Identifier>@
+ 
+Posibles valores de "parameter identifier": USER_ID, USER_NAME, LANGUAGE y LOCALE.[>END<]!$[FingerTextData FingerTextData]@#
+PROCESS_ASIGNAR_PERMISOS
+GLOBAL
+<gel:script xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:bpm="jelly:com.niku.bpm.gel.BPMTagLibrary" xmlns:core="jelly:core"
+  xmlns:email="jelly:email" xmlns:file="jelly:com.niku.union.gel.FileTagLibrary" xmlns:gel="jelly:com.niku.union.gel.GELTagLibrary"
+  xmlns:racemedy="urn:HelpDesk_Query_Service" xmlns:rem="jelly:com.niku.union.gel.RemedyTagLibrary"
+  xmlns:soap="jelly:com.niku.union.gel.SOAPTagLibrary" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+  xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sql="jelly:sql" xmlns:util="jelly:util"
+  xmlns:x="jelly:org.apache.commons.jelly.tags.xml.XMLTagLibrary" xmlns:xog="http://www.niku.com/xog" xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+  <!-- Inicializar fuente de datos BBDD Clarity -->
+  <gel:setDataSource dbId="Niku"/>
+  <core:catch var="e_general_exception">
+    <!-- Para cada usuario "Analista" obtiene los proyectos en los que tiene una asignación -->
+    <sql:query escapeText="false" var="q_user_assign"><![CDATA[
+		SELECT 
+		ii.id idInversion
+	  , sr.user_name idRecurso
+	  , x.permiso
+		FROM INV_INVESTMENTS ii 
+			INNER JOIN ODF_CA_INV ci
+			INNER JOIN CMN_SEC_USERS sr on sr.id = ci.d_supervisor
+				ON ii.id = ${gel_objectInstanceId} AND ci.id = ii.id
+			, (
+			SELECT 'ProjectViewFull' permiso
+			UNION 
+			SELECT 'ProjectEditFull' permiso
+			UNION 
+			SELECT 'ProjectEditManagement' permiso
+			UNION 
+			SELECT 'ProjectEditTasks' permiso
+			UNION 
+			SELECT 'ProjectViewDOCM' permiso
+			UNION 
+			SELECT 'ProjectManagerMgmt' permiso
+			UNION 
+			SELECT 'RiskIssueView' permiso
+			UNION 
+			SELECT 'RiskIssueEdit' permiso
+			UNION 
+			SELECT 'RiskIssueDelete' permiso
+			) x 
+			]]></sql:query>
+    <core:choose>
+      <core:when test="${q_user_assign.rowCount &lt;= 0}">
+        <gel:log category="ERROR - q_user_assign" level="WARN">Error en la consulta.</gel:log>
+      </core:when>
+      <core:otherwise>
+        <!-- Variables genericas -->
+        <core:set value="USER" var="v_ppal_type"/>
+        <!-- <core:set value="ProjectEditManagement" var="v_perm_code"/> -->
+        <core:set value="0" var="v_cont"/>
+        <!-- Bucle para recoger los datos y aplicar permisos -->
+        <core:forEach items="${q_user_assign.rowsByIndex}" var="user_assign">
+          <core:set value="${user_assign[0]}" var="v_project_id"/>
+          <core:set value="${user_assign[1]}" var="v_user_name"/>
+          <core:set value="${user_assign[2]}" var="v_perm_code"/>
+          <!-- Establish variable to count errors -->
+          <core:set value="0" var="errorCount"/>
+          <!-- Begin transaction to update TABLE_NAME -->
+          <sql:transaction>
+            <!-- Update TABLE_NAME -->
+            <core:catch var="error">
+              <sql:update escapeText="0" var="totalUpdates"><![CDATA[
+									CALL CMN_SEC_ASSIGN_INST_RIGHT_SP(?, ?, ?, ?)
+								]]><sql:param value="${v_ppal_type}"/>
+                <sql:param value="${v_user_name}"/>
+                <sql:param value="${v_perm_code}"/>
+                <sql:param value="${v_project_id}"/>
+              </sql:update>
+            </core:catch>
+            <core:if test="${error != null}">
+              <gel:log level="WARN">Asignación - User name: ${v_user_name} - Project id: ${v_project_id}: Error: ${error} - Permiso: ${v_perm_code}</gel:log>
+			  <core:set value="null" var="error"/>
+            </core:if>
+          </sql:transaction>
+          <!-- Duerme el proceso 1 segundo para que acabe de escribir el script anterior -->
+          <core:set value="1000" var="v_sleep_ms"/>
+          <util:sleep millis="${v_sleep_ms}"/>
+          <!-- Aumenta contador -->
+        </core:forEach>
+      </core:otherwise>
+    </core:choose>
+	
+	<!-- Para cada usuario "Analista" obtiene los proyectos en los que tiene una asignación -->
+    <sql:query escapeText="false" var="q_user_assign"><![CDATA[
+		SELECT 
+		ii.id idInversion
+	  , sr.user_name idRecurso
+	  , x.permiso
+		FROM INV_INVESTMENTS ii 
+			INNER JOIN ODF_CA_INV ci ON ii.id = ${gel_objectInstanceId} AND ci.id = ii.id
+			inner join CMN_AUDITS au on au.OBJECT_ID = ii.id and au.OBJECT_CODE = 'project' and au.ATTRIBUTE_CODE = 'd_supervisor'
+			INNER JOIN CMN_SEC_USERS sr on sr.id = au.RAW_VALUE_BEFORE and sr.id != isnull(ci.d_supervisor2, 0)
+			, (
+			SELECT 'ProjectViewFull' permiso
+			UNION 
+			SELECT 'ProjectEditFull' permiso
+			UNION 
+			SELECT 'ProjectEditManagement' permiso
+			UNION 
+			SELECT 'ProjectEditTasks' permiso
+			UNION 
+			SELECT 'ProjectViewDOCM' permiso
+			UNION 
+			SELECT 'ProjectManagerMgmt' permiso
+			UNION 
+			SELECT 'RiskIssueView' permiso
+			UNION 
+			SELECT 'RiskIssueEdit' permiso
+			UNION 
+			SELECT 'RiskIssueDelete' permiso
+			) x 
+			where au.id = (select max(id) from CMN_AUDITS au where au.OBJECT_ID = ii.id and au.OBJECT_CODE = 'project' and au.ATTRIBUTE_CODE = 'd_supervisor')
+			]]></sql:query>
+    <core:choose>
+      <core:when test="${q_user_assign.rowCount &lt;= 0}">
+        <gel:log category="ERROR - q_user_assign" level="WARN">Error en la consulta.</gel:log>
+      </core:when>
+      <core:otherwise>
+        <!-- Variables genericas -->
+        <core:set value="USER" var="v_ppal_type"/>
+        <!-- <core:set value="ProjectEditManagement" var="v_perm_code"/> -->
+        <core:set value="0" var="v_cont"/>
+        <!-- Bucle para recoger los datos y aplicar permisos -->
+        <core:forEach items="${q_user_assign.rowsByIndex}" var="user_assign">
+          <core:set value="${user_assign[0]}" var="v_project_id"/>
+          <core:set value="${user_assign[1]}" var="v_user_name"/>
+          <core:set value="${user_assign[2]}" var="v_perm_code"/>
+          <!-- Establish variable to count errors -->
+          <core:set value="0" var="errorCount"/>
+          <!-- Begin transaction to update TABLE_NAME -->
+          <sql:transaction>
+            <!-- Update TABLE_NAME -->
+            <core:catch var="error">
+              <sql:update escapeText="0" var="totalUpdates"><![CDATA[
+									CALL CMN_SEC_REMOVE_INST_RIGHT_SP(?, ?, ?, ?)
+								]]><sql:param value="${v_ppal_type}"/>
+                <sql:param value="${v_user_name}"/>
+                <sql:param value="${v_perm_code}"/>
+                <sql:param value="${v_project_id}"/>
+              </sql:update>
+            </core:catch>
+            <core:if test="${error != null}">
+              <gel:log level="WARN">Borrado - User name: ${v_user_name} - Project id: ${v_project_id}: Error: ${error} - Permiso: ${v_perm_code}</gel:log>
+			  <core:set value="null" var="error"/>
+            </core:if>
+          </sql:transaction>
+          <!-- Duerme el proceso 1 segundo para que acabe de escribir el script anterior -->
+          <core:set value="1000" var="v_sleep_ms"/>
+          <util:sleep millis="${v_sleep_ms}"/>
+          <!-- Aumenta contador -->
+        </core:forEach>
+      </core:otherwise>
+    </core:choose>
+  </core:catch>
+  <core:choose>
+    <core:when test="${e_general_exception == NULL}">
+      <gel:log category="SUCCESS - End Script" level="INFO" message=" Script finalizado con éxito."/>
+    </core:when>
+    <core:otherwise>
+      <gel:log category="ERROR - e_general_exception" level="WARN" message=" GENERAL EXCEPTION: ${e_general_exception}"/>
+    </core:otherwise>
+  </core:choose>
+</gel:script>[>END<]!$[FingerTextData FingerTextData]@#
+NSQL_Ejemplo
+GLOBAL
+ SELECT @SELECT:INV.ID:ID@
+  ,@SELECT:INV.CODE:CODE@   ,@SELECT:INV.NAME:NAME@            
+FROM INV_INVESTMENTS INV INNER JOIN INV_PROJECTS PROJECT ON INV.ID = PROJECT.prID
+INNER JOIN ODF_CA_PROJECT ODF ON ODF.ID = INV.ID 
+WHERE (1=1)
+   AND @NVL@(INV.PURGE_FLAG,0)=0
+   AND @NVL@(PROJECT.IS_TEMPLATE,0)=0
+   AND @NVL@(PROJECT.IS_PROGRAM,0) = 0 
+   AND (@WHERE:SECURITY:INV:INV.ID@)
+   AND @FILTER@                                         
+@BROWSE-ONLY:AND @NVL@(ODF.PBK_FLAG,0)=1 AND INV.is_active=1:BROWSE-ONLY@[>END<]!$[FingerTextData FingerTextData]@#
+ListadoJSONSinDuplicados
+GLOBAL
+<core:new className="java.util.ArrayList" var="cadena_codigos_tienda"/>
+
+<core:if test="${!cadena_codigos_tienda.contains(tienda_code)}">
+	<core:set value="${cadena_codigos_tienda.add(tienda_code)}" var="void"/>
+</core:if>
+
+<core:set var="vJson" escapeText="false">
+<![CDATA[
+	{
+		"m_tnds_ascds": ${cadena_codigos_tienda}
+	}
+]]>
+</core:set>[>END<]!$[FingerTextData FingerTextData]@#
+LANZADERA_PROCESO
+GLOBAL
+<gel:script xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:bpm="jelly:com.niku.bpm.gel.BPMTagLibrary" xmlns:core="jelly:core"
+  xmlns:email="jelly:email" xmlns:file="jelly:com.niku.union.gel.FileTagLibrary" xmlns:gel="jelly:com.niku.union.gel.GELTagLibrary"
+  xmlns:racemedy="urn:HelpDesk_Query_Service" xmlns:rem="jelly:com.niku.union.gel.RemedyTagLibrary"
+  xmlns:soap="jelly:com.niku.union.gel.SOAPTagLibrary" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+  xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sql="jelly:sql" xmlns:util="jelly:util"
+  xmlns:x="jelly:org.apache.commons.jelly.tags.xml.XMLTagLibrary" xmlns:xog="http://www.niku.com/xog" xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+	<!-- Inicializar fuente de datos BBDD Clarity -->
+	<gel:parameter var="codigoProcesoVAC"/>
+	<gel:setDataSource dbId="Niku"/>
+	<core:catch var="e_general_exception">
+	
+	<core:new var="currentDate" className="java.util.Date"/>
+	<core:new className="java.text.SimpleDateFormat" var="format">
+	<core:arg type="java.lang.String" value="yyyy-MM-dd'T'HH:mm:ss" />
+	</core:new>
+	<core:invokeStatic className="java.util.TimeZone" method="getTimeZone" var="timezone">
+		<core:arg type="java.lang.String" value="GMT" />
+	</core:invokeStatic>
+	<core:invoke on="${format}" var="formattedDate" method="setTimeZone">
+		<core:arg type="java.util.TimeZone" value="${timezone}" />
+	</core:invoke>
+	<core:invoke on="${format}" var="formattedDate" method="format">
+		<core:arg type="java.util.Date" value="${currentDate}" />
+	</core:invoke>
+
+	<core:set var="fechaActual"><gel:formatDate format="yyyy-MM-dd HH:mm:ss" dateVar="currentDate"/></core:set>
+	<gel:log>${fechaActual}</gel:log>
+	<sql:query escapeText="false" var="q_vacaciones">
+		<![CDATA[
+			SELECT 
+				id
+				, m_inicio
+				, m_fin  
+			FROM odf_ca_m_asignacion_no_disp 
+			WHERE PARTITION_CODE = 'c_consum'
+			AND c_cancelada = 1 AND c_reasignado_cal = 0
+		]]>
+	</sql:query>
+	<core:choose>
+		<core:when test="${q_vacaciones.rowCount &lt;= 0}">
+			<gel:log level="INFO" category="INFO">No se han detectado vacaciones a cancelar</gel:log>
+		</core:when>
+		<core:otherwise>
+			<core:forEach items="${q_vacaciones.rowsByIndex}" var="r_vacaciones">
+				<core:set value="${r_vacaciones[0]}" var="vacacionesID"/>
+				
+				<core:set value="thisResource" var="objetoPrimario"/>
+				<core:set value="1" var="usuarioLanzador"/>
+				<core:set value="1" var="versionProceso"/>
+				<gel:log level="INFO">Se procede a la ejecución del proceso para la asignación de vacaciones: ${vacacionesID}</gel:log>
+				<sql:query escapeText="false" var="process_version">
+					<![CDATA[
+						SELECT v.id
+						FROM bpm_def_process_versions v
+						,bpm_def_processes p
+						WHERE p.process_code = '${codigoProcesoVAC}'
+						AND p.id = v.process_id
+						AND v.version_no = ${versionProceso}
+					]]>
+				</sql:query>
+				 <bpm:startProcess initObjectId="${vacacionesID}" initObjectKey="${objetoPrimario}" initUserId="${usuarioLanzador}" processVersionId="${process_version.rows[0].id}"/> 
+				<gel:log level="INFO">Proceso '${codigoProcesoVAC}' ejecutado para la asignación de vacaciones: ${vacacionesID}</gel:log>
+
+			</core:forEach>
+		</core:otherwise>
+	</core:choose>
+		
+	</core:catch>
+	<core:choose>
+		<core:when test="${e_general_exception == NULL}">
+			<gel:log level="INFO" category="SUCCESS - End Script" message=" Script finalizado con éxito."/>
+		</core:when>
+		<core:otherwise>
+			<gel:log level="WARN" category="ERROR - e_general_exception" message=" GENERAL EXCEPTION: ${e_general_exception}"/>
+		</core:otherwise>
+	</core:choose>
+</gel:script>[>END<]!$[FingerTextData FingerTextData]@#
+JSONObject_Y_Array
+GLOBAL
+
+<core:set var="resultsArray" value='${lecturaJSONResp.getJSONArray("_results")}'/>
+<core:set var="segundoObjecto" value='${resultsArray.getJSONObject(0)}'/>
+	<gel:log>${lecturaJSONResp.getJSONArray("_results")}</gel:log>
+	<gel:log>${segundoObjecto}</gel:log>
+<core:set value="${segundoObjecto.get('_self')}" var="self2"/>
+	<gel:log>${self2}</gel:log>
+<core:choose>
+	<core:when test="${(isAuthenticated == 'HTTP/1.1 200')}">
+				<core:if test="${debug == 1}">
+					<gel:log level="INFO">[INFO] Se ha leido correctamente.</gel:log>
+				</core:if>
+				<core:set value="${connectionClar.getInputStream()}" var="httpInputStream"/>
+				<core:new className="java.io.InputStreamReader" var="v_Input">
+					<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+				</core:new>
+				<core:new className="java.io.BufferedReader" var="v_InputData">
+					<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+				</core:new>
+				<core:set value="${v_InputData.readLine()}" var="lecturaJSON2"/>
+				<core:if test="${debug == 1}">
+					<gel:log>httpData: ${lecturaJSON2}</gel:log>
+				</core:if>
+				<core:set value="${httpInputStream.close()}" var="dummy"/>
+
+					
+			<core:new className="org.json.JSONObject" var="lecturaJSONResp2">
+				<core:arg type="java.lang.String" value="${lecturaJSON2}"/>
+			</core:new>
+
+			<core:set var="resultsArray2" value='${lecturaJSONResp2.getJSONObject("cost")}'/>
+			<gel:log>${resultsArray2}</gel:log>
+				
+			<core:set var="resultsArray3" value='${resultsArray2.getJSONObject("segmentList")}'/>
+			<gel:log>${resultsArray3}</gel:log>
+			<core:set var="resultsArray4" value='${resultsArray3.getJSONArray("segments")}'/>
+  
+			<gel:log>${resultsArray4}</gel:log>
+		
+						  
+		  <core:forEach trim="true" indexVar="iter" begin="0" step="1" end="${resultsArray4.length() - 1}">
+				 <core:set var="segundoObjecto3" value='${resultsArray4.getJSONObject(iter)}'/>
+				 <core:set var="dateString" value="${segundoObjecto3.get('start')}" />
+				
+				<gel:log>Número del mes: ${nummes}, Valor ${segundoObjecto3.get('value')}, Fecha : ${segundoObjecto3.get('start')}</gel:log>
+				 
+				<<core:set value="${segundoObjecto3.get('value')}" var="vmes1"/>
+		  </core:forEach>
+			<sql:query escapeText="false" var="q_seguimiento">
+				<![CDATA[
+					SELECT s.id FROM odf_ca_d_seg_financiero2 s WHERE ODF_PARENT_ID = ?
+				]]>
+				<sql:param value="${invID}"/>
+			</sql:query>
+			<core:choose>
+				<core:when test="${q_seguimiento.rowCount &lt;= 0}">
+					<gel:log level="INFO" category="ERROR - q_seguimiento">No se han encontrado Seguimientos que actualizar.</gel:log>
+				</core:when>
+				<core:otherwise>
+					<core:forEach items="${q_seguimiento.rowsByIndex}" var="seguimiento">
+						<core:set value="${seguimiento[0]}" var="idSeguimiento"/>
+						
+						<!-- INICIO de llamada API PUT -->
+						<core:set var="httpRESTURLClar">${ClarityRestUrl}/projects/${invID}/custDSegFinancierozs/${idSeguimiento}</core:set>
+							<gel:log>httpRESTURLClar: ${httpRESTURLClar}</gel:log>
+					</core:forEach>
+				</core:otherwise>
+			</core:choose>
+	</core:when>
+	<core:otherwise>
+		
+	</core:otherwise>
+</core:choose>[>END<]!$[FingerTextData FingerTextData]@#
+ForEachXPath
+GLOBAL
+<gel:forEach select="$proyecto/NikuDataBus/Projects/Project" var="v_current">
+    
+</gel:forEach>
+[>END<]!$[FingerTextData FingerTextData]@#
+ForEachQuery
+GLOBAL
+<core:forEach items="${QUERYVAR.rowsByIndex}" var="FILA">
+	<core:set value="${FILA[0]}" var="VALORCOLUMNA0"/>
+</core:forEach>
+[>END<]!$[FingerTextData FingerTextData]@#
+ForEachNormal
+GLOBAL
+<core:forEach trim="true" indexVar="iter" begin="1" step="1" end="${numRiesgos}">
+</core:forEach>
+[>END<]!$[FingerTextData FingerTextData]@#
+ForEachArchivo
+GLOBAL
+<core:forEach begin="0" indexVar="INDICE" items="${archivoLeido.rows}" step="1" trim="true" var="FILA">
+</core:forEach>
+[>END<]!$[FingerTextData FingerTextData]@#
+EmailPlantilla
+GLOBAL
+<gel:email from="908ppm.perecompte@auto.consum.es" fromName="Clarity PPM" to="${correo}" subject="[Clarity PPM] Nueva Asignación: ${tarean} en ${proyecto}">
+<![CDATA[
+	<table style="border: none;width:100.0%;">
+    <tbody>
+        <tr>
+            <td style="width:100.0%;padding:0cm 0cm 0cm 0cm;">
+                <table style="border: none;width:100.0%;">
+                    <tbody>
+                        <tr>
+                            <td style="width:100.0%;padding:0cm 0cm 0cm 0cm;"><br></td>
+                        </tr>
+                        <tr>
+                            <td style="padding:0cm 0cm 0cm 0cm;">
+                                <p style='margin-right:0cm;margin-left:0cm;font-size:15px;font-family:"Calibri",sans-serif;margin:0cm;text-align:center;'><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIYAAAA4CAYAAAA4uYCUAAABHmlDQ1BBcHBsZSBSR0IAACjPY2Bg0nB0cXJlEmBgyM0rKQpyd1KIiIxSYD/PwMbAzAAGicnFBY4BAT4gdl5+XioDBvh2jYERRF/WBZnFQBrgSi4oKgHSf4DYKCW1OJmBgdEAyE4pLykAijNOAbJFkrLB7BUgdlFIkDOQvQfI5kuHsM+A2EkQ9h0QuwjoCSD7DUh9OpjNxAA2B8IWAbFLUitA9jI45xdUFmWmZ5QoGFpaWio4puQnpSoEVxaXpOYWK3jmJecXFeQXJZakpoAcBXYfxN2OBQU5qQrAEGOgLgCFP4T1ORAcroxiZxBiCJBcWlQGZTIyniXMR5hRuZeBwTGIgYFlJ0Is7AcDwxp9BgZZZoSYmhIDg1A9A8PGAgDxwFA9TVL8KgAAAAlwSFlzAAALEwAACxMBAJqcGAAABrNpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDcuMC1jMDAwIDc5LjIxN2JjYTYsIDIwMjEvMDYvMTQtMTg6Mjg6MTEgICAgICAgICI+IDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+IDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiIHhtbG5zOnhtcD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLyIgeG1sbnM6eG1wTU09Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9tbS8iIHhtbG5zOnN0UmVmPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VSZWYjIiB4bWxuczpzdEV2dD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL3NUeXBlL1Jlc291cmNlRXZlbnQjIiB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iIHhtbG5zOnBob3Rvc2hvcD0iaHR0cDovL25zLmFkb2JlLmNvbS9waG90b3Nob3AvMS4wLyIgeG1wOkNyZWF0b3JUb29sPSJBZG9iZSBQaG90b3Nob3AgQ0MgMjAxNCAoTWFjaW50b3NoKSIgeG1wOkNyZWF0ZURhdGU9IjIwMjEtMDctMjJUMTQ6MjE6MjQrMDI6MDAiIHhtcDpNb2RpZnlEYXRlPSIyMDIxLTA3LTIyVDE0OjI4OjA2KzAyOjAwIiB4bXA6TWV0YWRhdGFEYXRlPSIyMDIxLTA3LTIyVDE0OjI4OjA2KzAyOjAwIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOjE1Mzc4OTMwLTc5NjctMzg0My04ZmJiLTdiNmQyOTE5YzYxZiIgeG1wTU06RG9jdW1lbnRJRD0ieG1wLmRpZDpERjM4NDYxQkFERUUxMUU0QkE4MjkwOTYyNTAxNzYwRCIgeG1wTU06T3JpZ2luYWxEb2N1bWVudElEPSJ4bXAuZGlkOkRGMzg0NjFCQURFRTExRTRCQTgyOTA5NjI1MDE3NjBEIiBkYzpmb3JtYXQ9ImltYWdlL3BuZyIgcGhvdG9zaG9wOkNvbG9yTW9kZT0iMyIgcGhvdG9zaG9wOklDQ1Byb2ZpbGU9IkFwcGxlIFJHQiI+IDx4bXBNTTpEZXJpdmVkRnJvbSBzdFJlZjppbnN0YW5jZUlEPSJ4bXAuaWlkOjNERTFGREZGQURFRTExRTRCQTgyOTA5NjI1MDE3NjBEIiBzdFJlZjpkb2N1bWVudElEPSJ4bXAuZGlkOjNERTFGRTAwQURFRTExRTRCQTgyOTA5NjI1MDE3NjBEIi8+IDx4bXBNTTpIaXN0b3J5PiA8cmRmOlNlcT4gPHJkZjpsaSBzdEV2dDphY3Rpb249InNhdmVkIiBzdEV2dDppbnN0YW5jZUlEPSJ4bXAuaWlkOjk0ZDI4YmVmLTRmMWEtZDM0Zi04ZjlkLTM1MjZjYzA4ODkzZCIgc3RFdnQ6d2hlbj0iMjAyMS0wNy0yMlQxNDoyMTo1MiswMjowMCIgc3RFdnQ6c29mdHdhcmVBZ2VudD0iQWRvYmUgUGhvdG9zaG9wIDIyLjQgKFdpbmRvd3MpIiBzdEV2dDpjaGFuZ2VkPSIvIi8+IDxyZGY6bGkgc3RFdnQ6YWN0aW9uPSJzYXZlZCIgc3RFdnQ6aW5zdGFuY2VJRD0ieG1wLmlpZDoxNTM3ODkzMC03OTY3LTM4NDMtOGZiYi03YjZkMjkxOWM2MWYiIHN0RXZ0OndoZW49IjIwMjEtMDctMjJUMTQ6Mjg6MDYrMDI6MDAiIHN0RXZ0OnNvZnR3YXJlQWdlbnQ9IkFkb2JlIFBob3Rvc2hvcCAyMi40IChXaW5kb3dzKSIgc3RFdnQ6Y2hhbmdlZD0iLyIvPiA8L3JkZjpTZXE+IDwveG1wTU06SGlzdG9yeT4gPC9yZGY6RGVzY3JpcHRpb24+IDwvcmRmOlJERj4gPC94OnhtcG1ldGE+IDw/eHBhY2tldCBlbmQ9InIiPz7l+TaQAAAE+klEQVR42u2bW2hURxjHo1sxEXG1MWga8QJitUUqWmsUwWIQ6iUxIqVUK7WFttQboVJBFEkLiqJVAwEL4g1F8cELPhjQUNKHWop5iC2lSlVKSVupKY0XpKTq+h/8gpNlz1z2nDNn1v0Wfi+7c+Y7nPntnJlvZkoymUyJjIvPhpZUE0iX8MfZJ7uddZQkJEYH+IHlYDFyiZFhOViMIDFYDhYjUIxeOSqKpZFeGlFVBWaDevA+WAFqwRtgCIvRl5+ikAMPtho0hGQNWAbmg0kgFfKeSqm+M+AfkNHwM9ghYlvEqCTRclLIYkQiBx5Co8GDt0U05mEw3fJeXgDrwN8hYp8G4wxi1avqKXQxQssRkxgyx8Ewg/sYBS5FFPM+eLfYxeiVo9JTMQS/qv7F+G00+D2GuKuKXQzBdTDKUzEE13INFPHdQHAlppiPwcJiFyMvORyKIWjOEX+TwXUPwPfgFDgJLoBbhjHFeCVd7GJYy6ER4z4NInW0gC6DRuoBI7N6C9V1d2kwOjjg3qeAQ9QzqOI2shjP5BgTgRi/WQg2AHwA7mka6RPpmvmKcv+JPIVh7AXUqwTVJXqX/izGUzrBeFdiSPUt0YhxSCr7paJck2XcDzVxq1kMCzmiFoPqvKaos1Uqd0RRbrFlzP7ifhX1NbAYfbmUgBgnFHW2SeXOKMotzCPuPtAdwA4Woy8dCYhxTFHnWancfkW5c6BfjOsvLEYCYlxW1LlLKrdVMy5oMR2Ashiei4FrXtdMH2stBqq9XKVFsreCpq4shsdikBSdivr+ENNaqXyZYf5D5iH1SLvAolzJKxYjfjFEo63U8DFNO9sMEk3Lc8RfFzKb+gi0g21gGovhRowo2R4Qvx84GmGcG2AzGM5i+C3Gv+AjzT0IOT6nFHxUcUUmdE/QDq/nRYw60FOAYoidVVUW3ftI8AX4K+IeZLxzMfDgF4D6mJgYgRxJ9xhin8Ucy4GhWHepowWyrgju4WZ2z+FCjDD/Zh13wIyQcvgwxhCrqm/mOXtI0UZgMW5oDfG62eb8VeJAjlkh5AgjRjf9HsRXNHD8xaBhxDS2LIL8g9gXOpNE+YZWYU3E6JI3KTsbY8QsxwMwV4pVQ995k8egrfzXNY2zIoYMpthRvpSmyzo5picy+EQj1Fo0WFg55hrGcpngmkCvjaD6DsY5SKejDEZiOp+VWDSYKzlcp8TPGy65v6zYEbY3hByqneafJTpddSBHjUUs12LsNFxyf1WT9h6Ypxi7Tbb4JZbHiFkOMZapk2LNokGqD2I0GopRSgIElX07TzEOeNtjZMlxz5EcMwLk8FIMKtuuOW4wyDJ2ueZI42JvMp+KBnMlh89ibNQMFttMM6coN1Yjmuidyr1KiScsh89ijNDs7u49QtAM5tFB5BRdOwhMBO/QjrEe3ZlWL9dKYpbjIVguxZoKbvsuBpXf4ijz+oq3i2gkR3dMcjzKkmMyyeG7GGJd5NuYxVjt/eqq1GCu5Ljosxh0TRp8F9PZ1fUFs+zuWI4K38WQpq9NBrvATBFnTOYV3EYdB3J8GkFDOhNDuv41Orj8f4hT9WuFaAW7gwuNNwyMjYnRFotQQwMYkocYqvoGW9TzIngPfE2vmT9zyHIb/EgirRdSWdSfpkPROQktBsOwGAyLwbAYDIvBsBgMi8GwGAyLwbAYDIvBsBgMi8GwGPwQGBaDMeUJ3xCAMg6wj8wAAAAASUVORK5CYII=" alt="image" width="134" height="56"></p>
+                            </td>
+                        </tr>
+                        
+                    </tbody>
+                </table>
+                <p style='margin-right:0cm;margin-left:0cm;font-size:15px;font-family:"Calibri",sans-serif;margin:0cm;'>&nbsp;</p>
+                <table style="border: none;width:100.0%;">
+                    <tbody>
+                        <tr>
+                            <td style="padding:0cm 0cm 0cm 0cm;">
+                                <table style="border: none;width:100.0%;">
+                                    <tbody>
+                                        <tr>
+                                            <td style="padding:0cm 0cm 0cm 0cm;">
+                                                <p style='margin-right:0cm;margin-left:0cm;font-size:15px;font-family:"Calibri",sans-serif;margin:0cm;text-align:center;'><span style='font-family:"Helvetica",sans-serif;'><span style="font-size:18px;">Se ha aprobado la solicitud de forma automática<b>"${p_name}"</b>. Puede avanzar la petición al estado Evaluándose </span></span>&nbsp;</p>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="width:100.0%;border:none;border-top:solid #A1BCF8 3.0pt;padding:6.0pt 0cm 6.0pt 0cm;">
+								<pre style='margin:0cm;font-size:13px;font-family:"Courier New";'><span style='font-size:16px;font-family:"Arial",sans-serif;color:#0A0A0A;'>Dado que no ha habido respuesta por parte de Privacidad y han transcurrido 7 días se ha aprobado automáticamente.</span></pre>
+                                <pre style='margin:0cm;font-size:13px;font-family:"Courier New";'><span style='font-size:16px;font-family:"Arial",sans-serif;color:#0A0A0A;'> </span></pre>
+                                <pre style='margin:0cm;font-size:13px;font-family:"Courier New";'><span style='font-size:16px;font-family:"Arial",sans-serif;color:#0A0A0A;'>Solicitud : ${p_name}</span></pre>
+                                <pre style='margin:0cm;font-size:13px;font-family:"Courier New";'><span style='font-size:16px;font-family:"Arial",sans-serif;color:#0A0A0A;'>Referencia : ${p_ref}</span></pre>
+                                <pre style='margin:0cm;font-size:13px;font-family:"Courier New";'><span style='font-size:16px;font-family:"Arial",sans-serif;color:#0A0A0A;'> </span></pre>
+                                <pre style='margin:0cm;font-size:13px;font-family:"Courier New";'><span style='font-size:16px;font-family:"Arial",sans-serif;color:#0A0A0A;'>Puede acceder a través del siguiente enlace para ver más información, </span></pre>
+                                <br/>
+                                <p style='margin-right:0cm;margin-left:0cm;font-size:15px;font-family:"Calibri",sans-serif;margin:0cm;text-align:center;'><span style='font-size:16px;font-family:"Arial",sans-serif;color:#0A0A0A;'><a href="${url_openagent}action:pma.ideaProperties&return_to=pma.ideaList&id=${p_id}"><span style="font-size:26px;color:white;border:none windowtext 1.0pt;padding:0cm;background:#20BAD9; text-decoration: none;">HAGA CLICK AQUÍ</span></a></span></p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </td>
+        </tr>
+    </tbody>
+</table>
+<table style="border: none;width:100.0%;">
+    <tbody>
+        <tr>
+            <td style="width:100.0%;padding:0cm 0cm 0cm 0cm;">
+                <p style='margin-right:0cm;margin-left:0cm;font-size:15px;font-family:"Calibri",sans-serif;margin:0cm;'><br></p>
+            </td>
+        </tr>
+    </tbody>
+</table>
+	]]>
+</gel:email>[>END<]!$[FingerTextData FingerTextData]@#
+Debugflag
+GLOBAL
+<gel:parameter var="debug_flag"/>
+
+<core:if test="${debug_flag != 0}">
+	<gel:log>Mensaje Debug = 1</gel:log>
+</core:if>[>END<]!$[FingerTextData FingerTextData]@#
+DEBUG_1
+GLOBAL
+<core:if test="${debug == 1}">
+																																<gel:log>${textoJSON}</gel:log>
+																															</core:if>[>END<]!$[FingerTextData FingerTextData]@#
+CoreChoose
+GLOBAL
+<core:choose>
+	<core:when test="">
+	</core:when>
+	<core:otherwise>
+	</core:otherwise>
+</core:choose>
+[>END<]!$[FingerTextData FingerTextData]@#
+CoreCatch
+GLOBAL
+<core:catch var="catch">
+	
+</core:catch>
+<core:choose>
+	<core:when test="${catch != NULL}">
+		
+	</core:when>
+	<core:otherwise>
+		
+	</core:otherwise>
+</core:choose>
+[>END<]!$[FingerTextData FingerTextData]@#
+ArrayList_ObjetoJSON
+GLOBAL
+<core:new className="java.util.ArrayList" var="listaLunes" />		
+<core:new className="java.util.ArrayList" var="listaMartes" />		
+<core:new className="java.util.ArrayList" var="listaMiercoles" />		
+<core:new className="java.util.ArrayList" var="listaJueves" />		
+<core:new className="java.util.ArrayList" var="listaViernes" />	
+
+<sql:query var="v_query">
+<![CDATA[
+select user_id idInternoRecurso FROM SRM_RESOURCES sr WHERE UNIQUE_NAME = '${v_recurso}'
+]]>
+</sql:query>
+<core:choose>
+	<core:when test="${numIteracionDias == 0}">
+		<core:if test="${!listaLunes.contains(idInternoRecurso)}">
+		  <core:set value="${listaLunes.add(idInternoRecurso)}" var="void" />
+		</core:if>
+	</core:when>
+	<core:when test="${numIteracionDias == 1}">
+		<core:if test="${!listaMartes.contains(idInternoRecurso)}">
+		  <core:set value="${listaMartes.add(idInternoRecurso)}" var="void" />
+		</core:if>
+	</core:when>
+	<core:when test="${numIteracionDias == 2}">
+		<core:if test="${!listaMiercoles.contains(idInternoRecurso)}">
+		  <core:set value="${listaMiercoles.add(idInternoRecurso)}" var="void" />
+		</core:if>
+	</core:when>
+	<core:when test="${numIteracionDias == 3}">
+		<core:if test="${!listaJueves.contains(idInternoRecurso)}">
+		  <core:set value="${listaJueves.add(idInternoRecurso)}" var="void" />
+		</core:if>
+	</core:when>
+	<core:when test="${numIteracionDias == 4}">
+		<core:if test="${!listaViernes.contains(idInternoRecurso)}">
+		  <core:set value="${listaViernes.add(idInternoRecurso)}" var="void" />
+		</core:if>
+	</core:when>
+</core:choose>[>END<]!$[FingerTextData FingerTextData]@#
+ArrayJSON_Y_JSONObject
+GLOBAL
+
+<core:set var="resultsArray" value='${lecturaJSONResp.getJSONArray("_results")}'/>
+<core:set var="segundoObjecto" value='${resultsArray.getJSONObject(0)}'/>
+	<gel:log>${lecturaJSONResp.getJSONArray("_results")}</gel:log>
+	<gel:log>${segundoObjecto}</gel:log>
+<core:set value="${segundoObjecto.get('_self')}" var="self2"/>
+	<gel:log>${self2}</gel:log>
+<core:choose>
+	<core:when test="${(isAuthenticated == 'HTTP/1.1 200')}">
+				<core:if test="${debug == 1}">
+					<gel:log level="INFO">[INFO] Se ha leido correctamente.</gel:log>
+				</core:if>
+				<core:set value="${connectionClar.getInputStream()}" var="httpInputStream"/>
+				<core:new className="java.io.InputStreamReader" var="v_Input">
+					<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+				</core:new>
+				<core:new className="java.io.BufferedReader" var="v_InputData">
+					<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+				</core:new>
+				<core:set value="${v_InputData.readLine()}" var="lecturaJSON2"/>
+				<core:if test="${debug == 1}">
+					<gel:log>httpData: ${lecturaJSON2}</gel:log>
+				</core:if>
+				<core:set value="${httpInputStream.close()}" var="dummy"/>
+
+					
+			<core:new className="org.json.JSONObject" var="lecturaJSONResp2">
+				<core:arg type="java.lang.String" value="${lecturaJSON2}"/>
+			</core:new>
+
+			<core:set var="resultsArray2" value='${lecturaJSONResp2.getJSONObject("cost")}'/>
+			<gel:log>${resultsArray2}</gel:log>
+				
+			<core:set var="resultsArray3" value='${resultsArray2.getJSONObject("segmentList")}'/>
+			<gel:log>${resultsArray3}</gel:log>
+			<core:set var="resultsArray4" value='${resultsArray3.getJSONArray("segments")}'/>
+  
+			<gel:log>${resultsArray4}</gel:log>
+		
+						  
+		  <core:forEach trim="true" indexVar="iter" begin="0" step="1" end="${resultsArray4.length() - 1}">
+				 <core:set var="segundoObjecto3" value='${resultsArray4.getJSONObject(iter)}'/>
+				 <core:set var="dateString" value="${segundoObjecto3.get('start')}" />
+				
+				<gel:log>Número del mes: ${nummes}, Valor ${segundoObjecto3.get('value')}, Fecha : ${segundoObjecto3.get('start')}</gel:log>
+				 
+				<<core:set value="${segundoObjecto3.get('value')}" var="vmes1"/>
+		  </core:forEach>
+			<sql:query escapeText="false" var="q_seguimiento">
+				<![CDATA[
+					SELECT s.id FROM odf_ca_d_seg_financiero2 s WHERE ODF_PARENT_ID = ?
+				]]>
+				<sql:param value="${invID}"/>
+			</sql:query>
+			<core:choose>
+				<core:when test="${q_seguimiento.rowCount &lt;= 0}">
+					<gel:log level="INFO" category="ERROR - q_seguimiento">No se han encontrado Seguimientos que actualizar.</gel:log>
+				</core:when>
+				<core:otherwise>
+					<core:forEach items="${q_seguimiento.rowsByIndex}" var="seguimiento">
+						<core:set value="${seguimiento[0]}" var="idSeguimiento"/>
+						
+						<!-- INICIO de llamada API PUT -->
+						<core:set var="httpRESTURLClar">${ClarityRestUrl}/projects/${invID}/custDSegFinancierozs/${idSeguimiento}</core:set>
+							<gel:log>httpRESTURLClar: ${httpRESTURLClar}</gel:log>
+					</core:forEach>
+				</core:otherwise>
+			</core:choose>
+	</core:when>
+	<core:otherwise>
+		
+	</core:otherwise>
+</core:choose>[>END<]!$[FingerTextData FingerTextData]@#
+API_DOWNLOADFILE_AND_CSV_TO_JSON
+GLOBAL
+<gel:script xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:bpm="jelly:com.niku.bpm.gel.BPMTagLibrary" xmlns:core="jelly:core"
+  xmlns:email="jelly:email" xmlns:file="jelly:com.niku.union.gel.FileTagLibrary" xmlns:gel="jelly:com.niku.union.gel.GELTagLibrary"
+  xmlns:racemedy="urn:HelpDesk_Query_Service" xmlns:rem="jelly:com.niku.union.gel.RemedyTagLibrary"
+  xmlns:soap="jelly:com.niku.union.gel.SOAPTagLibrary" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/"
+  xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:sql="jelly:sql" xmlns:util="jelly:util"
+  xmlns:x="jelly:org.apache.commons.jelly.tags.xml.XMLTagLibrary" xmlns:xog="http://www.niku.com/xog" xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:MCh="jelly:eu.mesmerizedChild.commons.jelly.MChTagLibrary">
+	<!-- Inicializar fuente de datos BBDD Clarity -->
+	<gel:setDataSource dbId="Niku"/>
+	<core:catch var="e_general_exception">
+		
+		<core:set var="httpRESTURLClar">${ClarityRestUrl}/custZIfmComCods/${gel_objectInstanceId}</core:set>
+		<core:if test="${debug == 1}">
+			<gel:log>httpRESTURLClar: ${httpRESTURLClar}</gel:log>
+		</core:if>
+		<core:new className="java.net.URL" var="remoteURLClar">
+			<core:arg type="java.lang.String" value="${httpRESTURLClar}"/>
+		</core:new>
+		<core:set value="${remoteURLClar.openConnection()}" var="connectionClar"/>
+		<core:set value="${connectionClar.setUseCaches(false)}" var="void"/>
+		<core:set value="${connectionClar.setRequestMethod('GET')}" var="void"/>
+		<core:set value="${connectionClar.setRequestProperty('Content-Type', 'application/json')}" var="void"/>
+		<core:set value="${connectionClar.setRequestProperty('Accept', 'application/json')}" var="void"/>
+		<core:set value="${connectionClar.setRequestProperty('authToken', sessionID)}" var="void"/>
+		<core:set value="${connectionClar.connect()}" var="void"/>
+
+		<core:set value="${connectionClar.getResponseCode()}" var="responseCode"/>
+
+		<core:choose>
+			<core:when test="${responseCode == 200}">
+				<core:set value="${connectionClar.getInputStream()}" var="httpInputStream"/>
+				<core:new className="java.io.InputStreamReader" var="v_Input">
+					<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+				</core:new>
+				<core:new className="java.io.BufferedReader" var="v_InputData">
+					<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+				</core:new>
+				<core:set value="${v_InputData.readLine()}" var="lecturaJSON"/>
+				<core:set value="${httpInputStream.close()}" var="dummy"/>
+				<core:new className="org.json.JSONObject" var="lecturaJSONResp">
+					<core:arg type="java.lang.String" value="${lecturaJSON}"/>
+				</core:new>
+				
+				<core:set value="${lecturaJSONResp.get('z_file')}" var="zFile"/>
+				<core:set value="${zFile.get('url')}" var="fileUrl"/>
+				
+				<gel:log level="INFO">FileURL attached: ${fileUrl}</gel:log>
+
+			</core:when>
+			<core:otherwise>
+				<core:set value="${connectionClar.getErrorStream()}" var="httpInputStream"/>
+				<core:new className="java.io.InputStreamReader" var="v_Input">
+					<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+				</core:new>
+				<core:new className="java.io.BufferedReader" var="v_InputData">
+					<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+				</core:new>
+				<core:set value="${v_InputData.readLine()}" var="errorResponse"/>
+				<core:set value="${httpInputStream.close()}" var="dummy"/>
+
+				<core:new className="org.json.JSONObject" var="jsonRespError">
+					<core:arg type="java.lang.String" value="${errorResponse}"/>
+				</core:new>
+				<core:set value="${jsonRespError.get('errorMessage')}" var="error_msg"/>
+				<gel:log level="ERROR">[ERROR] ${error_msg}</gel:log>
+				<gel:log level="WARN">isAuthenticated: ${isAuthenticated}</gel:log>
+				<gel:log level="WARN">lecturaJSONResp: ${lecturaJSONResp.toString(2)}</gel:log>
+			</core:otherwise>
+		</core:choose>
+		
+		<core:if test="${not empty fileUrl}">
+		
+			<core:set var="httpRESTURLClar">${fileUrl}</core:set>
+			<core:if test="${debug == 1}">
+				<gel:log>httpRESTURLClar: ${httpRESTURLClar}</gel:log>
+			</core:if>
+			<core:new className="java.net.URL" var="remoteURLClar">
+				<core:arg type="java.lang.String" value="${httpRESTURLClar}"/>
+			</core:new>
+			<core:set value="${remoteURLClar.openConnection()}" var="connectionClar"/>
+			<core:set value="${connectionClar.setUseCaches(false)}" var="void"/>
+			<core:set value="${connectionClar.setRequestMethod('GET')}" var="void"/>
+			<core:set value="${connectionClar.setRequestProperty('authToken', sessionID)}" var="void"/>
+			<core:set value="${connectionClar.connect()}" var="void"/>
+			
+			<core:set value="${connectionClar.getResponseCode()}" var="responseCode"/>
+			<core:choose>
+				<core:when test="${responseCode == 200}">
+					<core:set var="contentDisposition" value="${connectionClar.getHeaderField('Content-Disposition')}"/>
+					<gel:log level="INFO">Filename: ${contentDisposition}</gel:log>
+					<core:set value="${connectionClar.getInputStream()}" var="httpInputStream"/>
+					
+					<core:new className="java.io.InputStreamReader" var="inputStreamReader">
+						<core:arg value="${httpInputStream}"/>
+						<core:arg type="java.lang.String" value="UTF-8"/>
+					</core:new>
+					
+					<core:new className="org.json.JSONArray" var="jsonArray"/>
+					<core:new className="org.apache.commons.lang.StringEscapeUtils" var="escapeUtils"/>
+					<!-- Iterate through file rows -->
+					
+					<!-- Capture process start time -->
+					<core:new className="java.util.GregorianCalendar" var="startTime"/>
+					<core:catch var="err">
+						<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+						<!-- File object for source -->
+						<!-- Scanner to read lines -->
+
+						<core:new className="java.util.Scanner" var="rowScanner">
+							<core:arg type="java.io.Reader" value="${inputStreamReader}"/>
+						</core:new>
+						<!-- Set row delimiter -->
+						<core:invoke method="useDelimiter" on="${rowScanner}">
+							<core:arg type="java.lang.String" value="[|\\*]"/>
+						</core:invoke>
+						<!-- List to store rows -->
+						<core:new className="java.util.ArrayList" var="rowList"/>
+						<!-- Read rows -->
+						<core:while test="${rowScanner.hasNext()}">
+							<core:invoke method="next" on="${rowScanner}" var="scannedValue"/>
+							<core:invoke method="add" on="${rowList}">
+								<core:arg type="java.lang.String" value="${scannedValue}"/>
+							</core:invoke>
+						</core:while>
+						<!-- Close Scanner and InputStream -->
+						<core:invoke method="close" on="${rowScanner}"/>
+						<core:invoke method="close" on="${fileInputStream}"/>
+						<!-- Get rowList size -->
+						<core:invoke method="size" on="${rowList}" var="rowListSize"/>
+						<!-- Get headers from first row -->
+						<core:invoke method="get" on="${rowList}" var="headerRow">
+							<core:arg type="int" value="0"/>
+						</core:invoke>
+						<!-- Create Scanner for headers -->
+						<core:new className="java.util.Scanner" var="headerScanner">
+							<core:arg type="java.lang.String" value="${headerRow}"/>
+						</core:new>
+						<!-- Set delimiter for headers -->
+						<core:invoke method="useDelimiter" on="${headerScanner}">
+							<core:arg type="java.lang.String" value="[\\^\\*]"/>
+						</core:invoke>
+						<!-- List to store headers -->
+						<core:new className="java.util.ArrayList" var="headers"/>
+						<!-- Read each header -->
+						<core:while test="${headerScanner.hasNext()}">
+							<core:invoke method="next" on="${headerScanner}" var="header"/>
+							<core:invoke method="add" on="${headers}">
+								<core:arg value="${header}"/>
+							</core:invoke>
+						</core:while>
+						<!-- Close header Scanner -->
+						<core:invoke method="close" on="${headerScanner}"/>
+						<!-- Log and display headers -->
+						<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+						<gel:log level="INFO">${logDate} - Headers: ${headers}</gel:log>
+						<!-- Create JSON array list -->
+						<core:new className="java.util.ArrayList" var="jsonArray"/>
+						<!-- Calculate endIndex = rowListSize - 1 -->
+						<core:set var="endIndex">${rowListSize - 1}</core:set>
+						<!-- Iterate over data rows -->
+						<core:forEach var="i" begin="1" end="${endIndex}">
+							<!-- Get current row -->
+							<core:invoke method="get" on="${rowList}" var="row">
+								<core:arg type="int" value="${i}"/>
+							</core:invoke>
+							<!-- Create Scanner for columns -->
+							<core:new className="java.util.Scanner" var="columnScanner">
+								<core:arg type="java.lang.String" value="${row}"/>
+							</core:new>
+							<!-- Set delimiter for columns -->
+							<core:invoke method="useDelimiter" on="${columnScanner}">
+								<core:arg type="java.lang.String" value="[\\^\\*]"/>
+							</core:invoke>
+							<!-- List to store column values -->
+							<core:new className="java.util.ArrayList" var="columnValues"/>
+							<!-- Read columns -->
+							<core:while test="${columnScanner.hasNext()}">
+								<core:invoke method="next" on="${columnScanner}" var="scannedColumnValue"/>
+								<core:invoke method="add" on="${columnValues}">
+									<core:arg type="java.lang.String" value="${scannedColumnValue}"/>
+								</core:invoke>
+							</core:while>
+							<!-- Close column Scanner -->
+							<core:invoke method="close" on="${columnScanner}"/>
+							<!-- Create a Map for JSON object -->
+							<core:new className="java.util.HashMap" var="jsonObject"/>
+							<!-- Get columnValues size -->
+							<core:invoke method="size" on="${columnValues}" var="columnValuesSize"/>
+							<!-- Iterate through headers and assign values -->
+							<core:forEach var="header" items="${headers}" indexVar="j">
+								<core:choose>
+									<core:when test="${j lt columnValuesSize}">
+										<core:invoke method="get" on="${columnValues}" var="value">
+											<core:arg type="int" value="${j}"/>
+										</core:invoke>
+									</core:when>
+									<core:otherwise>
+										<core:set var="value" value=""/>
+									</core:otherwise>
+								</core:choose>
+								<!-- Add key-value pair to jsonObject -->
+								<core:invoke method="put" on="${jsonObject}">
+									<core:arg value="${header}"/>
+									<core:arg value="${value}"/>
+								</core:invoke>
+							</core:forEach>
+							<!-- Add jsonObject to jsonArray -->
+							<core:invoke method="add" on="${jsonArray}">
+								<core:arg value="${jsonObject}"/>
+							</core:invoke>
+						</core:forEach>
+						
+					</core:catch>
+					<!-- Handle any exceptions -->
+					<core:if test="${err ne null}">
+						<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+						<core:set value="${logDate}-WARN ${err.getMessage()}" var="logMessage"/>
+						<gel:log level="WARN">${logMessage}</gel:log>
+					</core:if>
+					<!-- Measure time at the end of the process -->
+					<core:new className="java.util.GregorianCalendar" var="endTime"/>
+					<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+					<core:set value="${logDate} - Time Taken Processing file: ${(endTime.getTimeInMillis() - startTime.getTimeInMillis()) / 1000} seconds" var="logMessage"/>
+					<gel:log level="INFO">${logMessage}</gel:log>
+					<!-- Iterate through file rows -->
+					<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+					<gel:log level="INFO">${logDate} - Rows of CSV to Process: ${jsonArray.size()}</gel:log>
+					<!-- Iterate over jsonArray -->
+					<core:new className="java.util.GregorianCalendar" var="startTime"/>
+					<core:forEach var="i" begin="0" end="${jsonArray.size() - 1}">
+						<core:invoke method="get" on="${jsonArray}" var="jsonObject">
+							<core:arg type="int" value="${i}"/>
+						</core:invoke>
+						<core:invoke method="entrySet" on="${jsonObject}" var="entrySet"/>
+						<core:forEach var="entry" items="${entrySet}">
+							<core:invoke method="getKey" on="${entry}" var="key"/>
+							<core:invoke method="getValue" on="${entry}" var="value"/>
+							<core:choose>
+								<core:when test="${key == 'cpdMasterCommodityTypeID'}">
+									<core:set var="commodityTypeID" value="${value}"/>
+								</core:when>
+								<core:when test="${key == 'IsActive'}">
+									<core:set var="isActive" value="${value}"/>
+								</core:when>
+								<core:when test="${key == 'IsUsedByTC'}">
+									<core:set var="isUsedByTC" value="${value}"/>
+								</core:when>
+								<core:when test="${key == 'Rank'}">
+									<core:set var="rank" value="${value}"/>
+								</core:when>
+								<core:when test="${key == 'CategoryCode'}">
+									<core:set var="categoryCode" value="${value}"/>
+								</core:when>
+								<core:when test="${key == 'CategoryDescription'}">
+									<core:set var="categoryDescription" value="${value}"/>
+								</core:when>
+								<core:otherwise>
+									<!-- <gel:log level="INFO">Key: ${key}, Value: ${value}</gel:log> -->
+									<!-- Skip non-relevant fields -->
+								</core:otherwise>
+							</core:choose>
+						</core:forEach>
+						<!-- Create JSON for API request -->
+						<core:set var="jsonEnvio">
+						<![CDATA[{
+						  "z_log_severity": "INFO",
+						  "z_status": "NEW",
+						  "z_log": "${currentDate} IMPORT DATA",
+						  "z_in_commodity_type_id": "${commodityTypeID}",
+						  "z_in_is_active": "${isActive}",
+						  "z_in_is_used_by_tc": "${isUsedByTC}",
+						  "z_in_rank": "${rank}",
+						  "z_in_category_code": "${categoryCode}",
+						  "z_in_category_description": "${categoryDescription}"
+						}]]></core:set>
+						<!-- Log JSON data to be sent -->
+						<!-- <gel:log>JSON Data to be sent: ${jsonEnvio}</gel:log> -->
+						<!-- Setup API POST request -->
+						<core:set var="httpRESTURLClar" value="${ClarityRestUrl}/custZIfmComCods/${gel_objectInstanceId}/custZIfsComCods"/>
+						<core:new className="java.net.URL" var="remoteURLClar">
+							<core:arg type="java.lang.String" value="${httpRESTURLClar}"/>
+						</core:new>
+						<core:set value="${remoteURLClar.openConnection()}" var="connectionClar"/>
+						<core:set value="${connectionClar.setDoInput(true)}" var="void"/>
+						<core:set value="${connectionClar.setDoOutput(true)}" var="void"/>
+						<core:set value="${connectionClar.setRequestMethod('POST')}" var="void"/>
+						<core:set value="${connectionClar.setRequestProperty('Content-Type', 'application/json')}" var="void"/>
+						<core:set value="${connectionClar.setRequestProperty('Accept', 'application/json')}" var="void"/>
+						<core:set value="${connectionClar.setRequestProperty('authToken', sessionID)}" var="void"/>
+						<!-- Send JSON data -->
+						<core:new className="java.io.OutputStreamWriter" var="wr">
+							<core:arg type="java.io.OutputStream" value="${connectionClar.getOutputStream()}"/>
+						</core:new>
+						<core:invoke method="write" on="${wr}">
+							<core:arg type="java.lang.String" value="${jsonEnvio}"/>
+						</core:invoke>
+						<core:invoke method="flush" on="${wr}"/>
+						<core:invoke method="close" on="${wr}"/>
+						<!-- Get response -->
+						<core:set value="${connectionClar.getResponseCode()}" var="responseCode"/>
+						<core:choose>
+							<core:when test="${responseCode == 200}">
+								<core:if test="${debug == 1}">
+									<gel:log level="INFO">[INFO] Data successfully inserted.</gel:log>
+									<core:set value="${connectionClar.getInputStream()}" var="httpInputStream"/>
+									<core:new className="java.io.InputStreamReader" var="v_Input">
+										<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+									</core:new>
+									<core:new className="java.io.BufferedReader" var="v_InputData">
+										<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+									</core:new>
+									<core:set value="${v_InputData.readLine()}" var="responseString"/>
+									<core:set value="${httpInputStream.close()}" var="dummy"/>
+									<core:new className="org.json.JSONObject" var="lecturaJSONResp">
+										<core:arg type="java.lang.String" value="${responseString}"/>
+									</core:new>
+									<core:set value="${lecturaJSONResp.get('_internalId')}" var="internalIDcustZIfsComCods"/>
+									<gel:log>Inserted data with internal ID: ${internalIDcustZIfsComCods}</gel:log>
+								</core:if>
+								<core:set var="totalRows" value="${totalRows + 1}"/>
+							</core:when>
+							<core:otherwise>
+								<core:set value="${connectionClar.getErrorStream()}" var="httpInputStream"/>
+								<core:new className="java.io.InputStreamReader" var="v_Input">
+									<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+								</core:new>
+								<core:new className="java.io.BufferedReader" var="v_InputData">
+									<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+								</core:new>
+								<core:set value="${v_InputData.readLine()}" var="errorResponse"/>
+								<core:set value="${httpInputStream.close()}" var="dummy"/>
+								<core:new className="org.json.JSONObject" var="jsonRespError">
+									<core:arg type="java.lang.String" value="${errorResponse}"/>
+								</core:new>
+								<core:set value="${jsonRespError.get('errorMessage')}" var="error_msg"/>
+								<gel:log level="ERROR">[ERROR] ${error_msg}</gel:log>
+								<gel:log level="WARN">responseCode: ${responseCode}</gel:log>
+								<gel:log level="WARN">body: ${jsonEnvio}</gel:log>
+							</core:otherwise>
+						</core:choose>
+					</core:forEach>
+					<!-- Measure the time at the end of processing requests -->
+					
+					<gel:log level="INFO">${logDate} - Total Rows created : ${totalRows}</gel:log>
+					<core:set var="httpRESTURLClar">${ClarityRestUrl}/custZIfmComCods/${gel_objectInstanceId}</core:set>
+					<core:new className="java.net.URL" var="remoteURLClar">
+						<core:arg type="java.lang.String" value="${httpRESTURLClar}"/>
+					</core:new>
+					<core:set value="${remoteURLClar.openConnection()}" var="connectionClar"/>
+					<core:set value="${connectionClar.setDoInput(true)}" var="void" />
+					<core:set value="${connectionClar.setDoOutput(true)}" var="void" />
+					<core:set value="${connectionClar.setConnectTimeout(180000)}" var="void" />
+					<core:set value="${connectionClar.setReadTimeout(180000)}" var="void" />
+					<core:set value="${connectionClar.setUseCaches(false)}" var="void"/>
+					<core:set value="${connectionClar.setRequestMethod('PUT')}" var="void"/>
+					<core:set value="${connectionClar.setRequestProperty('Content-Type', 'application/json')}" var="void"/>
+					<core:set value="${connectionClar.setRequestProperty('x-api-force-patch', 'true')}" var="void"/>
+					<core:set value="${connectionClar.setRequestProperty('Accept', 'application/json')}" var="void"/>
+					<core:set value="${connectionClar.setRequestProperty('authToken', sessionID)}" var="void"/>
+					<core:set value="${connectionClar.setRequestProperty('cache-control', 'no-cache')}" var="void"/>
+
+					<core:set value="${connectionClar.connect()}" var="void"/>
+
+					<core:set var="textoJSON" escapeText="false">
+						<![CDATA[{
+						"z_total_instances": "${totalRows}"
+						}]]>
+					</core:set>
+
+					<core:new className="java.io.OutputStreamWriter" var="wr1">
+						<core:arg type="java.io.OutputStream" value="${connectionClar.getOutputStream()}"/>
+					</core:new>
+
+					<core:set var="void" value="${wr1.write(textoJSON)}"/>
+					<core:set var="void" value="${wr1.flush()}"/>
+					<core:set var="void" value="${wr1.close()}"/>
+
+					<core:set value="${connectionClar.getResponseCode()}" var="responseCode"/>
+
+					<core:choose>
+						<core:when test="${responseCode == 200}">
+							<core:if test="${debug == 1}">
+								<gel:log level="INFO">[INFO] Updated total rows.</gel:log>
+							</core:if>
+						</core:when>
+						<core:otherwise>
+							<core:set value="${connectionClar.getErrorStream()}" var="httpInputStream"/>
+							<core:new className="java.io.InputStreamReader" var="v_Input">
+								<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+							</core:new>
+							<core:new className="java.io.BufferedReader" var="v_InputData">
+								<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+							</core:new>
+							<core:set value="${v_InputData.readLine()}" var="errorResponse"/>
+							<core:set value="${httpInputStream.close()}" var="dummy"/>
+
+							<core:new className="org.json.JSONObject" var="jsonRespError">
+								<core:arg type="java.lang.String" value="${errorResponse}"/>
+							</core:new>
+							<core:set value="${jsonRespError.get('errorMessage')}" var="error_msg"/>
+							<gel:log level="ERROR">[ERROR] ${error_msg}</gel:log>
+							<gel:log level="WARN">responseCode: ${responseCode}</gel:log>
+							<gel:log level="WARN">textoJSON: ${textoJSON}</gel:log>
+						</core:otherwise>
+					</core:choose>
+					
+					<core:new className="java.util.GregorianCalendar" var="endTime"/>
+					<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+					<core:set value="${logDate} - Time Taken Processing request: ${(endTime.getTimeInMillis() - startTime.getTimeInMillis()) / 1000} seconds" var="logMessage"/>
+					<gel:log level="INFO">${logMessage}</gel:log>
+					
+					<core:catch var="executionOfAProcess">
+						<gel:parameter var="p_processCode"/>
+						<!-- <gel:parameter default="admin" var="p_startAsUser"/> -->
+						<core:set var="p_startAsUser" value="${cl_UserName}"/>
+						<gel:parameter default="0" var="executeProcess"/>
+						<gel:setDataSource dbId="niku"/>
+						<!-- Extract the userid, make sure the user exists -->
+						<core:if test="${executeProcess}">
+							<sql:query escapeText="false" var="q_info_user">
+								<![CDATA[
+									SELECT id 
+									FROM CMN_SEC_USERS 
+									WHERE user_name = ?
+								]]>
+								<sql:param value="${p_startAsUser}"/>
+							</sql:query>
+							<core:choose>
+								<core:when test="${q_info_user.rowCount &lt;= 0}">
+									<gel:log level="WARN" category="ERROR - q_info_user">Unable to start process ${p_processCode} as ${p_startAsUser}: user does not exist</gel:log>
+								</core:when>
+								<core:otherwise>
+									<core:forEach items="${q_info_user.rowsByIndex}" var="info_user">
+										<core:set value="${info_user[0]}" var="v_user_id"/>
+										<gel:log level="INFO">Preparing to launch process ${p_processCode} as ${p_startAsUser} (userId = ${v_user_id})</gel:log>
+									</core:forEach>
+									<core:if test="${p_processCode != null}">
+										<!-- Query for the version id of the process we're trying to launch we assume we're launching the next process on the same object we're executing on currently -->
+										<sql:query escapeText="false" var="q_info_proceso">
+											<![CDATA[
+												SELECT v.id
+												FROM
+													BPM_DEF_PROCESSES p
+													, BPM_DEF_PROCESS_VERSIONS v
+												WHERE p.process_code = ?
+												AND p.id = v.process_id
+												AND v.version_no = 1
+											]]>
+											<sql:param value="${p_processCode}"/>
+										</sql:query>
+										<core:choose>
+											<core:when test="${q_info_proceso.rowCount &lt;= 0}">
+												<gel:log level="WARN" category="ERROR - q_info_proceso">Unable to start process ${p_processCode} as ${p_startAsUser}: process does not exist</gel:log>
+											</core:when>
+											<core:otherwise>
+												<core:forEach items="${q_info_proceso.rowsByIndex}" var="info_proceso">
+													<core:set value="${info_proceso[0]}" var="v_process_id"/>
+													<gel:log level="INFO">Preparing to launch process ${p_processCode} as ${p_startAsUser} (processId = ${v_process_id})</gel:log>
+												</core:forEach>
+												<!-- Execute the process -->
+												<bpm:startProcess initObjectId="${gel_objectInstanceId}" initObjectKey="thisInterface: Commodity Codes" initUserId="${v_user_id}" processVersionId="${v_process_id}"/>
+											</core:otherwise>
+										</core:choose>
+									</core:if>
+								</core:otherwise>
+							</core:choose>
+						</core:if>
+					</core:catch>
+					<core:if test="${executionOfAProcess != null}">
+						<gel:log>Unable to start process, error: ${executionOfAProcess}</gel:log>
+					</core:if>
+			
+				</core:when>
+				<core:otherwise>
+					<core:set value="${connectionClar.getErrorStream()}" var="httpInputStream"/>
+					<core:new className="java.io.InputStreamReader" var="inputStreamReader">
+						<core:arg type="java.io.InputStream" value="${httpInputStream}"/>
+					</core:new>
+					<core:new className="java.io.BufferedReader" var="v_InputData">
+						<core:arg type="java.io.InputStreamReader" value="${v_Input}"/>
+					</core:new>
+					<core:set value="${v_InputData.readLine()}" var="errorResponse"/>
+					<core:set value="${httpInputStream.close()}" var="dummy"/>
+			
+					<core:new className="org.json.JSONObject" var="jsonRespError">
+						<core:arg type="java.lang.String" value="${errorResponse}"/>
+					</core:new>
+					<core:set value="${jsonRespError.get('errorMessage')}" var="error_msg"/>
+					<gel:log level="ERROR">[ERROR] ${error_msg}</gel:log>
+					<gel:log level="WARN">isAuthenticated: ${isAuthenticated}</gel:log>
+					<gel:log level="WARN">lecturaJSONResp: ${lecturaJSONResp.toString(2)}</gel:log>
+				</core:otherwise>
+			</core:choose>
+		</core:if>
+			
+		
+	</core:catch>
+	<core:choose>
+		<core:when test="${e_general_exception == NULL}">
+			<gel:log level="INFO" category="SUCCESS - End Script" message=" Script finished with success."/>
+		</core:when>
+		<core:otherwise>
+			<gel:log level="WARN" category="ERROR - e_general_exception" message=" GENERAL EXCEPTION: ${e_general_exception}"/>
+		</core:otherwise>
+	</core:choose>
+</gel:script>
+[>END<]!$[FingerTextData FingerTextData]@#
+API_ATTACHFILE
+GLOBAL
+<gel:script
+	xmlns:core="jelly:core"
+	xmlns:gel="jelly:com.niku.union.gel.GELTagLibrary"
+	xmlns:sql="jelly:sql"
+	xmlns:util="jelly:util"
+	xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+	<!--
+		Description
+			Upload attachment using REST API
+			
+		Parameters
+			@debugLog - set to 'true' to enable debug script logging. Please use only with well controlled dataset as this option creates high value of process logs. Default: false
+			
+			
+		History
+			18 Sep 2024		v0.1		Blas Orti - Initial release
+			
+	-->
+	
+	<core:set var="scriptName">z_upload_attachment</core:set>
+	<core:set var="scriptVersion">0.1</core:set>
+	
+	<!-- Variable for process time taken -->
+	<core:new className="java.util.GregorianCalendar" var="startTime"/>
+	
+	<!-- Catch any Exception -->
+	<core:catch var="err">
+		<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+		<gel:log level="INFO">${logDate}-INFO Starting script...</gel:log>
+		
+		<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+		<gel:log level="INFO">${logDate}-INFO Script: ${scriptName} ${scriptVersion}</gel:log>
+		
+		<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+		<gel:log level="INFO">${logDate}-INFO Java version: ${java.version}</gel:log>
+		
+		<core:invokeStatic var="xogVersion" className="java.util.ResourceBundle" method="getBundle">
+			<core:arg type="java.lang.String" value="xog"/>
+		</core:invokeStatic>
+		<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+		<gel:log level="INFO">${logDate}-INFO XOG/GEL version: ${xogVersion.getString('version')}</gel:log>
+		
+		<!-- Configurable script parameters -->
+		<!-- Flag to enable debug logging -->
+		<gel:parameter var="debugLog" default="false"/>
+		<!-- END Configurable script parameters -->
+		
+		
+		
+		
+		
+		<core:set var="url" value="${ClarityRestUrl}/virtual/attachments"/>
+		<core:new className="org.apache.http.client.methods.HttpPost" var="post">
+			<core:arg type="java.lang.String" value="${url}"/>
+		</core:new>
+		
+		<core:new className="org.apache.http.client.methods.HttpPost" var="post">
+			<core:arg type="java.lang.String" value="${url}"/>
+		</core:new>
+		
+		<core:set var="boundary" value="apiRequestToAttachFile1212"/>
+		
+        <core:set value="${post.setHeader('authToken', sessionID)}" var="void"/>
+        <core:set value="${post.setHeader('Accept', 'application/json')}" var="void"/>
+        <core:set value="${post.setHeader('Cookie', sessionID)}" var="void"/>
+        <core:set value="${post.setHeader('Connection', 'keep-alive')}" var="void"/>
+		<core:set value="${post.setHeader('Content-Type', 'multipart/form-data; boundary=' + boundary)}" var="void"/>
+		
+		<core:invokeStatic className="org.apache.http.entity.mime.MultipartEntityBuilder" method="create" var="multipartEntityBuilder"/>
+			
+		<core:set value="${multipartEntityBuilder.setBoundary(boundary)}" var="multipartEntityBuilder"/>
+		<core:set value="${multipartEntityBuilder.addTextBody('resourceId', '5016105')}" var="multipartEntityBuilder"/>
+		<core:set value="${multipartEntityBuilder.addTextBody('resourceName', 'custZIfmComCods')}" var="multipartEntityBuilder"/>
+		<core:set value="${multipartEntityBuilder.addTextBody('resourceType', 'ODF')}" var="multipartEntityBuilder"/>
+		<core:set value="${multipartEntityBuilder.addTextBody('attributeName', 'z_file')}" var="multipartEntityBuilder"/>
+				
+		<core:set var="sourceFilePath">/fs0/clarity1/share/StageOutMasterCommodityType.csv</core:set>
+		
+		<core:new className="java.io.File" var="sourceFile">
+			<core:arg type="java.lang.String" value="${sourceFilePath}"/>
+		</core:new>
+		
+		<core:set value="${multipartEntityBuilder.addBinaryBody('file', sourceFile)}" var="multipartEntityBuilder"/>
+		
+		
+		<!-- <core:invoke on="${multipartEntityBuilder}" method="addBinaryBody" var="multipartEntityBuilder"> -->
+			<!-- <core:arg type="java.lang.String" value="file"/> -->
+			<!-- <core:arg type="java.io.File" value="${sourceFile}"/> -->
+		<!-- </core:invoke> -->
+		
+		<core:invoke on="${multipartEntityBuilder}" method="build" var="httpEntity"/>
+		
+		<!-- <core:invoke on="${post}" method="setEntity"> -->
+			<!-- <core:arg type="org.apache.http.HttpEntity" value="${httpEntity}"/> -->
+		<!-- </core:invoke> -->
+		<core:set value="${post.setEntity(httpEntity)}" var="void"/>
+		
+		<core:if test="${debugLog}">
+			<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+			<gel:log level="DEBUG">${logDate}-DEBUG HTTP Post: ${post}</gel:log>
+		</core:if>
+
+		<core:invokeStatic className="org.apache.http.impl.client.HttpClients" method="createDefault" var="httpClient"/>
+		<core:invoke on="${httpClient}" method="execute" var="response">
+			<core:arg type="org.apache.http.client.methods.HttpPost" value="${post}"/>
+		</core:invoke>
+
+		<core:if test="${debugLog}">
+			<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+			<gel:log level="DEBUG">${logDate}-DEBUG Post REST response: ${response}</gel:log>
+		</core:if>
+		
+		<core:invoke on="${response}" method="getStatusLine" var="responseStatus"/>
+		<core:invoke on="${responseStatus}" method="getStatusCode" var="responseStatusCode"/>
+		<core:choose>
+			<core:when test="${responseStatusCode == 200}">
+				<core:set var="apiKeyCreated" value="${true}"/>
+				<!-- Post success, exit while loop -->
+				<core:set var="repeatCounter" value="${3}"/>
+				
+				<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+				<gel:log level="INFO">${logDate}-INFO Post ${url} SUCCESS: ${responseStatusCode}</gel:log>
+				
+				<core:invoke on="${response}" method="getEntity" var="responseEntity"/>
+				<core:invokeStatic className="org.apache.http.util.EntityUtils" method="toString" var="responseJSONString">
+					<core:arg type="org.apache.http.HttpEntity" value="${responseEntity}"/>
+				</core:invokeStatic>
+				
+				<core:if test="${debugLog}">
+					<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+					<gel:log level="DEBUG">${logDate}-DEBUG Post response JSON: ${responseJSONString}</gel:log>
+				</core:if>
+			</core:when>
+			<core:otherwise>
+				<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+				<gel:log level="WARN">${logDate}-WARN Post ${url} FAILED: ${responseStatusCode}</gel:log>
+				
+				<core:invoke on="${response}" method="getEntity" var="responseEntity"/>
+				<core:if test="${not empty(responseEntity)}">
+					<core:invokeStatic className="org.apache.http.util.EntityUtils" method="toString" var="responseJSONString">
+						<core:arg type="org.apache.http.HttpEntity" value="${responseEntity}"/>
+					</core:invokeStatic>
+					
+					<core:if test="${debugLog}">
+						<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+						<gel:log level="WARN">${logDate}-WARN Post ${url} response entity: ${responseEntity}</gel:log>
+						
+						<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+						<gel:log level="WARN">${logDate}-WARN Post ${url} response JSON: ${responseJSONString}</gel:log>
+						
+						<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+						<gel:log level="WARN">${logDate}-WARN Post ${url} responseStatus ProtocolVersion: ${responseStatus.getProtocolVersion()}</gel:log>
+						<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+						<gel:log level="WARN">${logDate}-WARN Post ${url} responseStatus ReasonPhrase: ${responseStatus.getReasonPhrase()}</gel:log>
+						<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+						<gel:log level="WARN">${logDate}-WARN Post ${url} responseStatus StatusCode: ${responseStatus.getStatusCode()}</gel:log>
+					</core:if>
+				</core:if>
+				
+				<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+				<gel:log level="WARN">${logDate}-WARN JSON request: ${bodyJSON}</gel:log>
+			</core:otherwise>
+		</core:choose>
+		
+		<core:invoke on="${response}" method="close"/>
+		
+	</core:catch>
+	<!-- END Catch any Exception -->
+	
+	
+	<!-- If any error is raised (via an Exception) then report it and exit -->
+	<core:if test="${err ne null}">
+		<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+		<core:set value="${logDate}-WARN ${err.getMessage()}" var="logMessage"/>
+		<gel:log level="WARN">${logMessage}</gel:log>
+		<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+		<core:set value="${logDate}-WARN ${err.printStackTrace()}" var="logMessage"/>
+		<gel:log level="WARN">${logMessage}</gel:log>
+	</core:if>
+	
+	<!-- Log process time taken -->
+	<core:new className="java.util.GregorianCalendar" var="endTime"/>
+	<gel:formatDate format="HH:mm:ss.SSS" stringVar="logDate"/>
+	<core:set value="${logDate}-INFO Time Taken: ${(endTime.getTimeInMillis() - startTime.getTimeInMillis()) / 1000} seconds" var="logMessage"/>
+	<gel:log level="INFO">${logMessage}</gel:log>
+</gel:script>[>END<]!$[FingerTextData FingerTextData]@#
